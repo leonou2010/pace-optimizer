@@ -9,7 +9,7 @@ import yaml
 from omegaconf import OmegaConf
 
 REPO = Path(__file__).resolve().parents[1]
-FIGURES = REPO / "figures"
+FIGURES = REPO / "src" / "pace_figures"
 sys.path.insert(0, str(FIGURES))
 
 import reproduce  # noqa: E402

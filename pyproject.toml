@@ -39,10 +39,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/pace", "figures"]
-
-[tool.hatch.build.targets.wheel.force-include]
-"figures" = "pace_figures"
+packages = ["src/pace", "src/pace_figures"]
 
 [tool.uv]
 # Pinned dev/experiment versions live in uv.lock; see README for `uv sync`.

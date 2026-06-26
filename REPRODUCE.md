@@ -20,7 +20,7 @@ is the headline number and `eval_logs` is the validation trajectory.
    ```bash
    pace-figure fig=fig1
    ```
-3. Run them (or run `pace-figure fig=fig1 +run=true +data=data/smoltalk`).
+3. Run them (or run `pace-figure fig=fig1 run=true data=data/smoltalk`).
 
 The machine-readable specs live in `figures/conf/fig/<id>.yaml`; `pace-figure
 fig=list` prints the catalog.

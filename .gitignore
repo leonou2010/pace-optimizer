@@ -29,3 +29,6 @@ tests/figtest.py
 
 # no bundled data in the repo (reproduction uses the static config map + pace-train)
 data/
+
+# durable local test artifacts (revisitable; references cluster paths)
+test_results/

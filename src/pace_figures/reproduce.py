@@ -23,7 +23,7 @@ import yaml
 from omegaconf import DictConfig
 
 _HERE = Path(__file__).resolve().parent
-REPO = _HERE.parent
+REPO = _HERE.parents[1]   # src/pace_figures -> src -> repo root
 FIGMAP_PATH = _HERE / "FIGMAP.yaml"
 
 
@@ -71,14 +71,19 @@ def main(cfg: DictConfig):
         extra.append(f"dataset.path={cfg.data}")
     if cfg.get("max_steps"):
         extra.append(f"training.max_steps={cfg.max_steps}")
+    if cfg.get("eval_samples"):
+        extra.append(f"training.eval_samples={cfg.eval_samples}")
+    if cfg.get("eval_interval"):
+        extra.append(f"training.eval_interval={cfg.eval_interval}")
     run = bool(cfg.get("run", False))
+    limit = cfg.get("limit")
 
     print(f"# {fig.id} ({fig.get('paper', '')}): {fig.get('desc', '')} — {len(curves)} runs\n")
     out_root = Path(cfg.get("out") or (REPO / "runs" / fig.id))
-    for c in curves:
+    for i, c in enumerate(curves):
         cmd = _command(fig, c, extra)
         print(" ".join(cmd))
-        if run:
+        if run and (limit is None or i < limit):
             label = f"{c['model']}_{c['method']}_{c['schedule']}_s{c['seed']}"
             env = dict(os.environ, PYTHONPATH=str(REPO / "src"),
                        PACE_RUN_DIR=str(out_root / label))
@@ -87,7 +92,7 @@ def main(cfg: DictConfig):
     if not run:
         ds = fig.get("dataset", "smoltalk")
         print(f"\n# Run these (after preparing the {ds} dataset, see README) with, e.g.:")
-        print(f"#   pace-figure fig={fig.id} +run=true +data=/path/to/{ds}")
+        print(f"#   pace-figure fig={fig.id} run=true data=/path/to/{ds}")
 
 
 if __name__ == "__main__":
