@@ -1,0 +1,5 @@
+id: fig_clip_frac_body
+title: "Lambda-clip fraction over training (eta=3e-4 row)"
+lr: 0.0003
+kappas: [0.2, 0.5, 0.7]
+c_values: [0.005, 0.015, 0.05, 0.15, 0.5]

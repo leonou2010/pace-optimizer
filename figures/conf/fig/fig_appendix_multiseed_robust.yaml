@@ -1,0 +1,3 @@
+id: fig_appendix_multiseed_robust
+title: "Multiseed robustness across models and schedules"
+models: [SmolLM2-1.7B, Qwen3-1.7B, Gemma3-1B]

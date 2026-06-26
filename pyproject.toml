@@ -1,0 +1,47 @@
+[project]
+name = "pace-optimizer"
+version = "0.1.0"
+description = "PACE: an AdamW variant with an lr-scaled pullback toward an EMA of the iterates, for constant-learning-rate language-model training."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Kwok Chun Au" },
+    { name = "Adam Block" },
+]
+keywords = ["optimizer", "adamw", "ema", "language-models", "deep-learning", "pytorch"]
+dependencies = [
+    "torch>=2.4",
+    "typing-extensions>=4.0",
+]
+
+[project.optional-dependencies]
+# Everything needed to run training and reproduce the paper figures.
+experiments = [
+    "transformers>=4.40",
+    "datasets>=2.19",
+    "hydra-core>=1.3",
+    "omegaconf>=2.3",
+    "numpy>=1.24",
+    "pandas>=2.0",
+    "matplotlib>=3.7",
+    "seaborn>=0.13",
+    "wandb>=0.16",
+]
+
+[project.scripts]
+pace-train = "pace.train:main"
+pace-figure = "pace_figures.reproduce:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pace", "figures"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"figures" = "pace_figures"
+
+[tool.uv]
+# Pinned dev/experiment versions live in uv.lock; see README for `uv sync`.

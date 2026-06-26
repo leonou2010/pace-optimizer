@@ -1,0 +1,26 @@
+# training / figure outputs
+runs/
+figures/rendered/
+outputs/
+multirun/
+wandb/
+*.pt
+*.ckpt
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# os
+.DS_Store
+
+# large extended data (fetched via data/download_extended.sh)
+data/extended/
+
+# cluster-internal validation tooling
+scripts/smoke.sbatch
+scripts/verify_repo.sh

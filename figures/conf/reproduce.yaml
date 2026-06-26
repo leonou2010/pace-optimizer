@@ -1,0 +1,10 @@
+defaults:
+  - fig: fig1
+  - _self_
+
+hydra:
+  run:
+    dir: /tmp/pace_hydra
+  output_subdir: null
+  job:
+    chdir: false

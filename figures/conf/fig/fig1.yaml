@@ -1,0 +1,4 @@
+id: fig1
+title: "Best-per-method finetuning validation loss"
+models: [SmolLM2-1.7B, Qwen3-1.7B, Gemma3-1B]
+methods: [AdamW, EMA, PACE]

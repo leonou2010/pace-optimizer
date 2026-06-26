@@ -1,0 +1,110 @@
+{
+ "Gemma3-1B|AdamW|const": {
+  "file": "Gemma3-1B_AdamW_const.json",
+  "fv": 1.0498
+ },
+ "Gemma3-1B|AdamW|cos": {
+  "file": "Gemma3-1B_AdamW_cos.json",
+  "fv": 0.9249
+ },
+ "Gemma3-1B|AdamW|wsd": {
+  "file": "Gemma3-1B_AdamW_wsd.json",
+  "fv": 0.9491
+ },
+ "Gemma3-1B|EMA|const": {
+  "file": "Gemma3-1B_EMA_const.json",
+  "fv": 0.9624
+ },
+ "Gemma3-1B|EMA|cos": {
+  "file": "Gemma3-1B_EMA_cos.json",
+  "fv": 0.9279
+ },
+ "Gemma3-1B|EMA|wsd": {
+  "file": "Gemma3-1B_EMA_wsd.json",
+  "fv": 0.9645
+ },
+ "Gemma3-1B|PACE|const": {
+  "file": "Gemma3-1B_PACE_const.json",
+  "fv": 0.8576
+ },
+ "Gemma3-1B|PACE|cos": {
+  "file": "Gemma3-1B_PACE_cos.json",
+  "fv": 0.8333
+ },
+ "Gemma3-1B|PACE|wsd": {
+  "file": "Gemma3-1B_PACE_wsd.json",
+  "fv": 0.854
+ },
+ "Qwen3-1.7B|AdamW|const": {
+  "file": "Qwen3-1.7B_AdamW_const.json",
+  "fv": 0.876
+ },
+ "Qwen3-1.7B|AdamW|cos": {
+  "file": "Qwen3-1.7B_AdamW_cos.json",
+  "fv": 0.7488
+ },
+ "Qwen3-1.7B|AdamW|wsd": {
+  "file": "Qwen3-1.7B_AdamW_wsd.json",
+  "fv": 0.7892
+ },
+ "Qwen3-1.7B|EMA|const": {
+  "file": "Qwen3-1.7B_EMA_const.json",
+  "fv": 0.8048
+ },
+ "Qwen3-1.7B|EMA|cos": {
+  "file": "Qwen3-1.7B_EMA_cos.json",
+  "fv": 0.7528
+ },
+ "Qwen3-1.7B|EMA|wsd": {
+  "file": "Qwen3-1.7B_EMA_wsd.json",
+  "fv": 0.8083
+ },
+ "Qwen3-1.7B|PACE|const": {
+  "file": "Qwen3-1.7B_PACE_const.json",
+  "fv": 0.7103
+ },
+ "Qwen3-1.7B|PACE|cos": {
+  "file": "Qwen3-1.7B_PACE_cos.json",
+  "fv": 0.706
+ },
+ "Qwen3-1.7B|PACE|wsd": {
+  "file": "Qwen3-1.7B_PACE_wsd.json",
+  "fv": 0.7062
+ },
+ "SmolLM2-1.7B|AdamW|const": {
+  "file": "SmolLM2-1.7B_AdamW_const.json",
+  "fv": 0.7867
+ },
+ "SmolLM2-1.7B|AdamW|cos": {
+  "file": "SmolLM2-1.7B_AdamW_cos.json",
+  "fv": 0.7002
+ },
+ "SmolLM2-1.7B|AdamW|wsd": {
+  "file": "SmolLM2-1.7B_AdamW_wsd.json",
+  "fv": 0.726
+ },
+ "SmolLM2-1.7B|EMA|const": {
+  "file": "SmolLM2-1.7B_EMA_const.json",
+  "fv": 0.7117
+ },
+ "SmolLM2-1.7B|EMA|cos": {
+  "file": "SmolLM2-1.7B_EMA_cos.json",
+  "fv": 0.7021
+ },
+ "SmolLM2-1.7B|EMA|wsd": {
+  "file": "SmolLM2-1.7B_EMA_wsd.json",
+  "fv": 0.7469
+ },
+ "SmolLM2-1.7B|PACE|const": {
+  "file": "SmolLM2-1.7B_PACE_const.json",
+  "fv": 0.6911
+ },
+ "SmolLM2-1.7B|PACE|cos": {
+  "file": "SmolLM2-1.7B_PACE_cos.json",
+  "fv": 0.6821
+ },
+ "SmolLM2-1.7B|PACE|wsd": {
+  "file": "SmolLM2-1.7B_PACE_wsd.json",
+  "fv": 0.6812
+ }
+}
