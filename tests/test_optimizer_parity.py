@@ -1,5 +1,5 @@
 """Parity test: the repo's PACE optimizer must be numerically identical to the
-original research implementation (`sf_bema`'s EMARegularizedAdamWV4).
+original research implementation (set PACE_REF_OPTIMIZER to point at it).
 
 Runs three configurations on a tiny synthetic regression problem and asserts the
 parameter trajectories match bit-for-bit:

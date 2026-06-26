@@ -24,3 +24,8 @@ data/extended/
 # cluster-internal validation tooling
 scripts/smoke.sbatch
 scripts/verify_repo.sh
+scripts/figtest.sbatch
+tests/figtest.py
+
+# no bundled data in the repo (reproduction uses the static config map + pace-train)
+data/

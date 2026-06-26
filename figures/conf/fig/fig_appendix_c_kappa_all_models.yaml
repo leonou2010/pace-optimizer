@@ -1,3 +1,0 @@
-id: fig_appendix_c_kappa_all_models
-title: "c x EMA-power ablation across all models"
-models: [Gemma3-1B, SmolLM2-1.7B, Qwen3-1.7B]

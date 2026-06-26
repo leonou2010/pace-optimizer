@@ -1,135 +1,100 @@
 # PACE
 
-**PACE** is an AdamW variant for language-model training that adds a small,
+**PACE** is a drop-in AdamW variant for language-model training. It adds a small,
 per-coordinate *pullback* toward an exponential moving average (EMA) of the
-iterates. The pullback gain is scaled by the learning rate and inversely by the
-Adam second-moment estimate, which lets PACE train at a **constant learning
-rate** and still match or beat carefully decayed AdamW/EMA baselines — no
+iterates; the pullback gain is scaled by the learning rate and inversely by the
+Adam second-moment estimate. The effect is that PACE trains well at a **constant
+learning rate** and matches or beats carefully decayed AdamW/EMA baselines — no
 learning-rate schedule to tune.
-
-This repository contains a clean, self-contained implementation of the optimizer,
-a Hydra-configured training pipeline, and a one-command reproduction of every
-figure in the paper.
 
 ```
 theta_{t+1} = (theta_t - AdamW_step) + lambda_{t,i} * (ema_{t-1} - theta_t)
 lambda_{t,i} = clamp( lr * c * decay_t / (sqrt(v_hat_i) + eps),  max = 1 )
 ```
 
-Setting the pullback strength `c = 0` recovers plain AdamW exactly; adding
-EMA evaluation recovers the EMA baseline. PACE is therefore a strict superset of
-both.
+## Use the optimizer
 
-## Install (uv)
-
-This project uses [uv](https://docs.astral.sh/uv/). Install uv, then:
+The optimizer is the whole product and depends only on PyTorch:
 
 ```bash
-uv sync --extra experiments     # optimizer + training + figure deps, from uv.lock
-```
-
-For just the optimizer (to drop `PACE` into your own training code):
-
-```bash
-uv add pace-optimizer           # or: pip install -r requirements.txt
+pip install pace-optimizer          # or: uv add pace-optimizer
 ```
 
 ```python
 from pace import PACE
-opt = PACE(model.parameters(), lr=1e-3, lambda_pullback=0.15, ema_kappa=0.2,
-           use_ema_eval=True)        # c=0 -> plain AdamW
-# ... opt.step() as usual; call opt.eval()/opt.train() around validation to use EMA weights.
+
+opt = PACE(model.parameters(), lr=1e-3,
+           lambda_pullback=0.15,    # c — pullback strength (0 ⇒ plain AdamW)
+           ema_kappa=0.2,           # kappa — EMA decay exponent
+           use_ema_eval=True)       # evaluate with the EMA weights
+
+for batch in loader:
+    loss = model(batch).loss
+    loss.backward()
+    opt.step(); opt.zero_grad()
+
+opt.eval()    # swap to EMA weights for validation
+validate(model)
+opt.train()   # swap back to the training weights
 ```
 
-## Reproduce the paper figures
+Setting `lambda_pullback=0` makes the update **bit-identical to `torch.optim.AdamW`**;
+adding `use_ema_eval=True` gives the EMA-evaluation baseline. PACE is a strict
+superset of both.
 
-Every figure is one command. Curated result data ships in `data/results/`, so no
-retraining is needed:
+## Reproduce the paper
+
+The repo ships **no result data and no plots** — only the optimizer, a training
+pipeline, and a **static map** from each paper figure to the exact training
+configs. See [REPRODUCE.md](REPRODUCE.md). In short:
 
 ```bash
-uv run pace-figure fig=fig1                     # headline finetuning figure
-uv run pace-figure fig=fig1 fig.models=[Qwen3-1.7B]   # override inputs
-uv run pace-figure fig=fig5_pretraining         # GPT-2 pretraining
+uv sync --extra experiments        # training + reproduction deps
+pace-figure fig=list               # the figure catalog
+pace-figure fig=fig1               # print the exact pace-train commands for Fig 1
 ```
 
-Output PDFs/PNGs are written to `figures/rendered/`. Each figure has a config at
-`figures/conf/fig/<id>.yaml` (its inputs: models, schedules, sweep axes, metric)
-and a builder at `figures/_figs/<id>.py`.
-
-| `fig=` | Figure | Models |
-|--------|--------|--------|
-| `fig1` | Best-per-method validation loss | SmolLM2-1.7B, Qwen3-1.7B, Gemma3-1B |
-| `fig_clip_frac_body` | Clip-fraction of the pullback gain | SmolLM2-1.7B |
-| `fig3_135m_grid` | Update-freq × pullback grid | SmolLM2-135M |
-| `fig5_pretraining` | Pretraining (const / c-sweep / WSD) | GPT-2-124M |
-| `fig_appendix_c_kappa_all_models` | κ × c response | all three |
-| `fig_appendix_train_curves` | Training-loss comparison | SmolLM2-135M / Qwen3 |
-| `fig_appendix_135m_full_grid` | Full (c, κ, uf) grid | SmolLM2-135M |
-| `fig_appendix_tulu_qwen` | Qwen3 on Tulu-3 | Qwen3-1.7B |
-| `fig_appendix_full_train_curves` | Fig 1 + last-25% zoom | all three |
-| `fig_appendix_clip_frac` / `_vs_c` | Coordinate saturation | SmolLM2-1.7B |
-| `fig_appendix_wsd_val_curves` / `_wsd_finetune` | Under decay schedules | SmolLM2-135M |
-| `fig_appendix_fig1_all_schedules` | 3 models × 3 schedules | all three |
-| `fig_appendix_multiseed_robust` | Seed robustness | all three, seeds 42/1337/2024 |
-| `fig_appendix_pretrain_kappa_sweep` / `_csweep` / `_csweep_kappa` / `_river` | Pretraining ablations | GPT-2-124M |
-
-The large GPT-2 pretraining sweep data is fetched on demand:
-
-```bash
-bash data/download_extended.sh
-```
+Each figure config (`figures/conf/fig/<id>.yaml`) lists its runs; every run is a
+normal `pace-train` invocation, so reproducing a figure is just training those
+configs and reading the result JSONs.
 
 ## Train
 
-Training is configured with [Hydra](https://hydra.cc). Config groups live in
+Training is configured with [Hydra](https://hydra.cc); config groups live in
 `src/pace/conf/`: `model/`, `dataset/`, `optimizer/` (`adamw` | `ema` | `pace`),
-and `schedule/` (`const` | `cos` | `wsd` | `cosine_to_zero`).
-
-First build a tokenized, prompt-masked dataset (once):
-
-```python
-from pace.data import prepare_sft
-prepare_sft("data/smoltalk", tokenizer_name="HuggingFaceTB/SmolLM2-1.7B",
-            dataset_name="HuggingFaceTB/smol-smoltalk", max_seq_len=1280)
-```
-
-Then train. PACE at constant LR (the headline setting):
+`schedule/` (`const` | `cos` | `wsd` | `cosine_to_zero`). Prepare a dataset once
+with `pace.data.prepare_sft`, then:
 
 ```bash
-uv run pace-train model=smollm2_1.7b optimizer=pace schedule=const \
+pace-train model=smollm2_1.7b optimizer=pace schedule=const \
     optimizer.lr=1e-3 optimizer.lambda_pullback=0.15 optimizer.ema_kappa=0.2 \
     dataset.path=data/smoltalk
 ```
 
-Baselines (decayed AdamW / EMA):
-
-```bash
-uv run pace-train model=smollm2_1.7b optimizer=adamw schedule=cos dataset.path=data/smoltalk
-uv run pace-train model=smollm2_1.7b optimizer=ema   schedule=wsd dataset.path=data/smoltalk
-```
-
-Key knobs: `optimizer.lambda_pullback` (=c, pullback strength), `optimizer.ema_kappa`
-(=κ, EMA decay exponent), `optimizer.ema_update_freq` (=uf), `seed`,
-`training.batch_size`, `training.gradient_accumulation_steps`,
-`training.eval_interval`. Results are written as a JSON
-(`{config, summary, eval_logs}`) under `runs/`; `summary.final_val_loss` is the
-plotted metric. W&B logging is off by default (`wandb.enabled=true` to turn on).
+A run writes `{config, summary, eval_logs}` as JSON under `runs/`;
+`summary.final_val_loss` is the plotted metric. W&B logging is off by default.
 
 ## Tests
 
 ```bash
-uv run python tests/test_optimizer_parity.py   # PACE == reference impl (bit-identical)
-uv run python tests/smoke_train.py             # few-step GPU training sanity (needs a GPU)
+uv run pytest -q                   # config map + standalone gate + optimizer parity
 ```
+
+`tests/test_optimizer_parity.py` checks `c=0 == torch.AdamW` and that the EMA
+eval-swap never perturbs training (and, if `PACE_REF_OPTIMIZER` points at a
+reference implementation, bit-identical parity). `tests/test_cli_map.py` and
+`tests/test_standalone.py` check the reproduction map and that the repo is
+lightweight and self-contained. A few-step GPU training check is in
+`tests/smoke_train.py`.
 
 ## Relation to prior work
 
 PACE's iterate-averaging component builds on the line of work on EMA / averaged
 optimizers for language models, in particular BEMA (Block & Zhang, 2025) and the
-broader literature on iterate averaging (Polyak–Ruppert). PACE differs in that
-the averaging is coupled to the optimizer step through a learning-rate-scaled,
+broader literature on iterate averaging (Polyak–Ruppert). PACE differs in that the
+averaging is coupled to the optimizer step through a learning-rate-scaled,
 per-coordinate pullback, which is what enables strong constant-learning-rate
-training. See the paper for a full discussion and comparisons.
+training.
 
 ## Citation
 

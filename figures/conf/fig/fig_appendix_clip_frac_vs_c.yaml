@@ -1,3 +1,0 @@
-id: fig_appendix_clip_frac_vs_c
-title: "End-of-training lambda-clip fraction vs c (SmolLM2-1.7B)"
-kappas: [0.2, 0.5, 0.7]

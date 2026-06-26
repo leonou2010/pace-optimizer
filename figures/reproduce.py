@@ -1,45 +1,93 @@
-"""Reproduce a paper figure from bundled result data.
+"""Expand a paper-figure config into the exact `pace-train` commands that
+reproduce its runs — the static reproduction map. Prints the commands by
+default; pass `+run=true` (and `+data=<prepared dataset>`) to execute them and
+emit the result JSONs.
 
-Usage (after ``uv sync``)::
+    pace-figure fig=list            # the figure catalog
+    pace-figure fig=fig1            # print the pace-train commands for Fig 1's curves
+    pace-figure fig=fig1 +run=true +data=/path/to/smoltalk   # train them -> result JSONs
 
-    uv run pace-figure fig=fig1
-    uv run pace-figure fig=fig1 fig.models=[SmolLM2-1.7B]
-
-Or directly::
-
-    python figures/reproduce.py fig=fig1
-
-Each figure ``<id>`` has a Hydra config at ``conf/fig/<id>.yaml`` describing its
-inputs, and a builder module ``_figs/<id>.py`` exposing ``build(cfg) -> dict``.
-The builder reads the curated JSONs under ``data/results/`` (override the data
-location with the ``PACE_DATA`` env var) and writes the PDF/PNG under
-``figures/rendered`` (override with ``PACE_FIG_OUT``).
+Each figure config (conf/fig/<id>.yaml) lists its curves; every curve is a
+complete training spec, so the printed command is exactly what a normal user
+would run with `pace-train`. There is no bundled data and no plotting: the output
+is the configs (or, with +run, the result JSONs).
 """
 
-import importlib
+import os
+import subprocess
 import sys
 from pathlib import Path
 
 import hydra
-from omegaconf import DictConfig, OmegaConf
+import yaml
+from omegaconf import DictConfig
 
-# Make `plot_utils` and the `_figs` package importable whether this file is run
-# directly or via the installed `pace-figure` console script.
 _HERE = Path(__file__).resolve().parent
-if str(_HERE) not in sys.path:
-    sys.path.insert(0, str(_HERE))
+REPO = _HERE.parent
+FIGMAP_PATH = _HERE / "FIGMAP.yaml"
+
+
+def _print_map():
+    figmap = yaml.safe_load(open(FIGMAP_PATH))
+    print(f"{'fig=<id>':38} {'paper':8} description")
+    print("-" * 90)
+    for fid, info in figmap.items():
+        print(f"{fid:38} {info['paper']:8} {info['desc']}")
+    print(f"\n{len(figmap)} figures catalogued. Print one figure's run configs with:  "
+          f"pace-figure fig=<id>")
+
+
+def _command(fig, curve, extra):
+    o = curve["optimizer"]
+    parts = [
+        "pace-train",
+        f"model={curve['model']}",
+        f"dataset={fig.get('dataset', 'smoltalk')}",
+        f"optimizer={o['name']}",
+        f"schedule={curve['schedule']}",
+        f"seed={curve['seed']}",
+        f"optimizer.lr={o['lr']}",
+        f"optimizer.lambda_pullback={o.get('lambda_pullback', 0.0)}",
+    ]
+    if o.get("ema_kappa") is not None:
+        parts.append(f"optimizer.ema_kappa={o['ema_kappa']}")
+    return parts + list(extra)
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="reproduce")
 def main(cfg: DictConfig):
-    fig_id = cfg.fig.id
-    builder = importlib.import_module(f"_figs.{fig_id}")
-    print(f"[pace-figure] reproducing {fig_id}")
-    result = builder.build(cfg.fig)
-    print("\n--- result ---")
-    print(OmegaConf.to_yaml({"config": OmegaConf.to_container(cfg.fig, resolve=True),
-                             "output": result}))
-    return result
+    fig = cfg.fig
+    if fig.id == "list":
+        _print_map()
+        return
+
+    curves = list(fig.get("curves", []) or [])
+    if not curves:
+        print(f"No run specs for '{fig.id}' yet — see REPRODUCE.md for the catalog.")
+        return
+
+    extra = []
+    if cfg.get("data"):
+        extra.append(f"dataset.path={cfg.data}")
+    if cfg.get("max_steps"):
+        extra.append(f"training.max_steps={cfg.max_steps}")
+    run = bool(cfg.get("run", False))
+
+    print(f"# {fig.id} ({fig.get('paper', '')}): {fig.get('desc', '')} — {len(curves)} runs\n")
+    out_root = Path(cfg.get("out") or (REPO / "runs" / fig.id))
+    for c in curves:
+        cmd = _command(fig, c, extra)
+        print(" ".join(cmd))
+        if run:
+            label = f"{c['model']}_{c['method']}_{c['schedule']}_s{c['seed']}"
+            env = dict(os.environ, PYTHONPATH=str(REPO / "src"),
+                       PACE_RUN_DIR=str(out_root / label))
+            subprocess.run([sys.executable, "-m", "pace.train"] + cmd[1:], env=env, check=False)
+
+    if not run:
+        ds = fig.get("dataset", "smoltalk")
+        print(f"\n# Run these (after preparing the {ds} dataset, see README) with, e.g.:")
+        print(f"#   pace-figure fig={fig.id} +run=true +data=/path/to/{ds}")
 
 
 if __name__ == "__main__":

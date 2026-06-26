@@ -2,6 +2,11 @@ defaults:
   - fig: fig1
   - _self_
 
+run: false        # +run=true to actually train the curves (else just print the commands)
+data: null        # +data=/path/to/prepared/dataset (required when run=true)
+max_steps: null   # +max_steps=N to cap steps (e.g. a quick check)
+out: null         # output dir for runs (defaults to runs/<fig>)
+
 hydra:
   run:
     dir: /tmp/pace_hydra

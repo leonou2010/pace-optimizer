@@ -1,4 +1,0 @@
-id: fig_appendix_135m_full_grid
-title: "SmolLM2-135M full 3x3 grid (update frequency x EMA power)"
-kappas: [0.3, 0.5, 0.7]
-ufs: [1, 5, 10]

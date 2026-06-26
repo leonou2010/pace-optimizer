@@ -1,4 +1,0 @@
-id: fig3_135m_grid
-title: "SmolLM2-135M granular ablation (kappa=0.3 row)"
-kappa: 0.3
-ufs: [1, 5, 10]

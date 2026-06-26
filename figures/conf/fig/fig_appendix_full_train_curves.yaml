@@ -1,4 +1,0 @@
-id: fig_appendix_full_train_curves
-title: "Appendix: full finetuning validation curves with final-quarter zoom"
-models: [SmolLM2-1.7B, Qwen3-1.7B, Gemma3-1B]
-methods: [AdamW, EMA, PACE]
