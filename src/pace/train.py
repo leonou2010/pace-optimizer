@@ -264,8 +264,10 @@ def main(cfg: DictConfig) -> float:
                     stop = True
                     break
 
-    # Final eval
-    res = evaluate(model, optimizer, val_loader, len(val_ds), ctx, use_ema_eval)
+    # Final eval over the full validation set (or eval_samples, if a cap is set —
+    # null leaves it full, which is what real runs use for the reported metric).
+    final_eval_n = eval_samples if eval_samples else len(val_ds)
+    res = evaluate(model, optimizer, val_loader, final_eval_n, ctx, use_ema_eval)
     best_val = min(best_val, res["val_loss"])
     total_time = time.time() - t_start
     final = {"step": global_step, "epoch": epochs,
