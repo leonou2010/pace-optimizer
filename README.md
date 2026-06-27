@@ -1,213 +1,184 @@
 # PACE
 
-📄 Paper: **[Training for the Model You Return: Improving Optimization for Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086)** (Au & Block, 2026 · arXiv:2606.25086)
+A drop-in PyTorch optimizer for iterate-averaged language-model training, and the code
+companion to the paper:
 
-**PACE** is a drop-in optimizer (a `torch.optim.Optimizer`): AdamW plus a small,
-per-coordinate pullback toward an exponential moving average (EMA) of recent weights,
-with a clipped strength.
+> **Training for the Model You Return: Improving Optimization for Iterate-Averaged
+> Language Models** — Au & Block, 2026 ([arXiv:2606.25086](https://arxiv.org/abs/2606.25086))
 
-In the paper it improves on AdamW and EMA-evaluated AdamW for 1–2B-parameter
-fine-tuning and for GPT-2 / FineWeb pretraining, across a range of learning rates and
-schedules.
+**PACE** is AdamW plus a small, per-coordinate pullback toward an exponential moving
+average (EMA) of recent weights. When the model you ultimately return is the EMA of the
+iterates (a common, robust choice), training that explicitly accounts for this averaging
+reaches a better returned model. In the paper PACE improves on AdamW and EMA-evaluated
+AdamW for 1–2B-parameter fine-tuning and GPT-2 / FineWeb pretraining, across a range of
+learning rates and schedules.
 
-Each optimizer step `t` (per coordinate `i`), as implemented:
-
-```
-# 1. AdamW step (decoupled weight decay + Adam), using the second moment v_hat
-theta'      = theta_t - AdamW_step(theta_t)
-
-# 2. pullback toward the EMA (applied every step; reference is the PRE-Adam theta_t)
-decay_t     = (1 + gamma * max(0, t - rho))^(-kappa)      # gamma=1, rho=0 by default -> (1+t)^(-kappa), floored at 1e-4
-lambda_{t,i}= clamp( lr * c * decay_t / (sqrt(v_hat_i) + eps),  max = 1 )
-theta_{t+1} = theta' + lambda_{t,i} * (ema_{t-1} - theta_t)
-
-# 3. EMA update (every `ema_update_freq` steps)
-ema_t       = (1 - beta_t) * ema_{t-1} + beta_t * theta_{t+1},   beta_t = decay_t
-```
-
-With `use_ema_eval=True` the weights evaluated and returned are the EMA (`ema_t`). The
-pullback (step 2) is applied on every step; only the EMA update (step 3) honours
-`ema_update_freq`.
-
-## Use the optimizer
-
-The optimizer is the core of the package and depends only on PyTorch:
+## Installation
 
 ```bash
-pip install pace-optimizer          # or: uv add pace-optimizer
+pip install pace-optimizer          # the optimizer only (depends on PyTorch)
 ```
+
+To also run training and reproduce the paper, install the extras with [uv](https://docs.astral.sh/uv/):
+
+```bash
+uv sync --extra experiments         # adds transformers, datasets, hydra, etc.
+```
+
+## Using the optimizer
+
+`PACE` is a standard `torch.optim.Optimizer`:
 
 ```python
 from pace import PACE
 
 opt = PACE(model.parameters(), lr=1e-3,
-           lambda_pullback=0.15,    # c — pullback strength
-           ema_kappa=0.2,           # kappa — EMA decay exponent
-           use_ema_eval=True)       # evaluate (and return) the EMA weights
+           lambda_pullback=0.15,    # c: pullback strength
+           ema_kappa=0.2,           # kappa: EMA decay exponent
+           use_ema_eval=True)       # evaluate and return the EMA weights
 
 for batch in loader:
     loss = model(batch).loss
     loss.backward()
-    opt.step(); opt.zero_grad()
+    opt.step()
+    opt.zero_grad()
 
-opt.eval()    # swap to EMA weights for validation
+opt.eval()       # swap in the EMA weights for validation
 validate(model)
-opt.train()   # swap back to the training weights
+opt.train()      # restore the training weights
 ```
 
-Two arguments recover the baselines:
-- `use_ema_eval` selects what is **returned and evaluated** — the EMA weights (`True`)
-  or the final iterate (`False`).
-- `lambda_pullback` (c) selects whether **training** applies the pullback (`c>0`) or not (`c=0`).
+### Update rule
 
-So: `c=0, use_ema_eval=True` → the **EMA baseline** (AdamW training, EMA returned);
-`c=0, use_ema_eval=False` → **plain AdamW** (matches `torch.optim.AdamW` up to
-floating-point ordering, ~1e-6 in the parity test); `c>0` → **PACE**. PACE generalizes
-both baselines.
+Each step `t`, per coordinate `i`:
 
-### All parameters
+```
+theta'        = theta_t - AdamW_step(theta_t)                       # 1. AdamW step
+decay_t       = max((1 + gamma * max(0, t - rho))^(-kappa), 1e-4)   #    rho=0 -> (1+t)^(-kappa)
+lambda_{t,i}  = clamp( lr * c * decay_t / (sqrt(v_hat_i) + eps),  max=1 )
+theta_{t+1}   = theta' + lambda_{t,i} * (ema_{t-1} - theta_t)       # 2. pullback toward the EMA
+ema_t         = (1 - decay_t) * ema_{t-1} + decay_t * theta_{t+1}   # 3. EMA update (every uf steps)
+```
 
-`PACE(params, ...)` — constructor arguments (paper symbol in parentheses):
+`v_hat` is Adam's bias-corrected second moment. The pullback (step 2) is applied every
+step; only the EMA update (step 3) honours `ema_update_freq`.
 
-| argument | symbol | default | meaning |
-|----------|--------|---------|---------|
-| `params` | – | – | iterable of parameters or param groups (standard `torch.optim` API) |
+### Recovering the baselines
+
+Two arguments place AdamW, EMA-evaluated AdamW, and PACE on one axis:
+
+| `lambda_pullback` (c) | `use_ema_eval` | method |
+|-----------------------|----------------|--------|
+| `0` | `False` | plain AdamW (matches `torch.optim.AdamW` to floating-point ordering) |
+| `0` | `True`  | EMA baseline (AdamW training, EMA returned) |
+| `> 0` | `True` | PACE |
+
+### Parameters
+
+| argument | symbol | default | description |
+|----------|--------|---------|-------------|
+| `params` | – | – | parameters or parameter groups (standard `torch.optim` API) |
 | `lr` | η | `1e-4` | AdamW learning rate |
 | `betas` | β₁,β₂ | `(0.9, 0.999)` | AdamW moment decay rates |
-| `eps` | ε | `1e-8` | AdamW denominator epsilon (also the floor in the pullback gain) |
+| `eps` | ε | `1e-8` | AdamW epsilon (also the floor of the pullback denominator) |
 | `weight_decay` | – | `0.01` | decoupled (AdamW) weight decay |
-| `lambda_pullback` | c | `0.0` | pullback strength. `0` = no pullback (AdamW/EMA baseline); `>0` = PACE |
+| `lambda_pullback` | c | `0.0` | pullback strength; `0` disables it (AdamW / EMA baseline) |
 | `clamp_pullback` | – | `True` | clamp each per-coordinate gain to `≤ 1` (interpolate toward the EMA, never past it) |
-| `beta_ema` | – | `0.01` | fixed EMA decay, used **only** when `ema_kappa is None` |
+| `beta_ema` | – | `0.01` | fixed EMA decay, used only when `ema_kappa is None` |
 | `use_ema_eval` | – | `False` | if `True`, `eval()` returns the EMA weights and `train()` restores the iterate |
-| `ema_kappa` | κ | `None` | exponent of the decaying EMA schedule `(1+γ·max(0,t−ρ))^(−κ)`. `None` ⇒ use the fixed `beta_ema` |
-| `ema_rho` | ρ | `0.0` | steps to hold before the schedule decays. `0` = the paper's `(1+γ·t)^(−κ)` |
+| `ema_kappa` | κ | `None` | exponent of the decaying EMA schedule; `None` uses the fixed `beta_ema` |
+| `ema_rho` | ρ | `0.0` | steps held before the schedule decays; `0` gives the paper's `(1+t)^(-κ)` |
 | `ema_gamma` | γ | `1.0` | schedule rate |
-| `ema_update_freq` | uf | `1` | update the EMA every `uf` steps (the pullback itself is applied every step) |
-| `log_stats` | – | `False` | compute per-step telemetry (λ stats, clip fraction, update norms) via `get_step_stats()`; off by default because each stat is a `.item()` GPU sync. The optimizer math is identical either way |
+| `ema_update_freq` | uf | `1` | update the EMA every `uf` steps (the pullback is applied every step) |
+| `log_stats` | – | `False` | record per-step telemetry (λ statistics, clip fraction, update norms) via `get_step_stats()`; off by default to avoid a per-step GPU synchronization |
 
-Per step `t`, per coordinate `i`: `λ = clamp(η·c·decay/(√v̂ᵢ+ε), max=1)` with
-`decay = max((1+γ·max(0,t−ρ))^(−κ), 1e-4)`; the weights move
-`θ ← (θ − AdamW_step) + λ·(ema_{t−1} − θ_t)`, then the EMA updates every `uf` steps with
-`β = decay`. (The paper's Algorithm 1 box places the pullback inside the `t mod uf`
-gate; the code applies it every step — identical for `uf=1`, which all paper runs use.)
+## Training
 
-## Reproduce the paper
-
-The repository ships **no result data and no plots** — only the optimizer, the training
-pipeline, and a **static map** from each paper figure to the exact training configs.
-Reproducing a figure means training its runs and reading the result JSONs.
+Training is configured with [Hydra](https://hydra.cc). Config groups live in
+`src/pace/conf/`: `model/`, `dataset/`, `optimizer/` (`adamw` | `ema` | `pace`), and
+`schedule/` (`const` | `cos` | `wsd`). Prepare a tokenized dataset once, then train:
 
 ```bash
-uv sync --extra experiments        # training + reproduction deps
-uv run pace-figure fig=list        # the figure catalog
-uv run pace-figure fig=fig1        # print the exact pace-train commands for Fig 1
-```
+pace-data --out data/smoltalk --tokenizer HuggingFaceTB/SmolLM2-1.7B
 
-Each figure config (`src/pace_figures/conf/fig/<id>.yaml`) lists its curves; every
-curve is a complete `pace-train` spec. For example Fig 1's nine runs (baselines use
-their best decay schedule, PACE uses a constant LR):
-
-| model | method | lr | c | kappa | schedule |
-|-------|--------|----|---|-------|----------|
-| SmolLM2-1.7B | AdamW / EMA / PACE | 1e-3 | – / 0 / 0.15 | – / 0.5 / 0.2 | cos / cos / const |
-| Qwen3-1.7B | AdamW / EMA / PACE | 5e-4 | – / 0 / 0.25 | – / 0.5 / 0.5 | cos / cos / const |
-| Gemma3-1B | AdamW / EMA / PACE | 1e-3 | – / 0 / 0.15 | – / 0.5 / 0.5 | cos / cos / const |
-
-Expected PACE `final_val_loss`: 0.6911 / 0.7103 / 0.8576. Train them with
-`uv run pace-figure fig=fig1 run=true data=<prepared dataset>` or by running the
-printed commands.
-
-**Scope.** The shipped trainer is a fine-tuning (SFT) trainer, so the fine-tuning
-figures (Fig 1, 3, 6, 7, 10, 11, 14–17 and the clip-fraction figures) reproduce
-end-to-end. The GPT-2 / FineWeb **pretraining** figures (Fig 5, 9, 18, 19, 20) are
-catalogued in the map for completeness, but were produced with a separate pretraining
-pipeline that is not included here; `pace-figure` prints their configs but the SFT
-trainer cannot run a raw-text corpus.
-
-## Train
-
-Training is configured with [Hydra](https://hydra.cc); config groups live in
-`src/pace/conf/`: `model/`, `dataset/`, `optimizer/` (`adamw` | `ema` | `pace`),
-`schedule/` (`const` | `cos` | `wsd`; `cos` decays to zero). Prepare a dataset once
-with `pace.data.prepare_sft`, then:
-
-```bash
 pace-train model=smollm2_1.7b optimizer=pace schedule=const \
     optimizer.lr=1e-3 optimizer.lambda_pullback=0.15 optimizer.ema_kappa=0.2 \
     dataset.path=data/smoltalk
 ```
 
-A run writes `{config, summary, eval_logs, step_logs}` as JSON under `runs/`;
-`summary.final_val_loss` is the plotted metric (`final_train_loss` is recorded too).
-The metric convention follows the paper: `val_loss`/`ema_val_loss` are the **returned
-(EMA)** weights and `vanilla_val_loss` is the final iterate. W&B logging is disabled by
-default, and the optimizer's per-step telemetry (gradient/pullback norms, clip fraction)
-is gated behind `optimizer.log_stats`; it is disabled by default to avoid a per-step GPU
-synchronization. Training performs a single pass and does not checkpoint or resume, so
-set `training.max_steps` accordingly.
+Each run writes `{config, summary, eval_logs, step_logs}` as JSON under `runs/`.
+`summary.final_val_loss` is the reported metric (`final_train_loss` is recorded too).
+Following the paper, `val_loss`/`ema_val_loss` are measured on the returned (EMA) weights
+and `vanilla_val_loss` on the final iterate. W&B logging is off by default; training is a
+single pass with no checkpoint/resume, so set `training.max_steps` accordingly.
 
-### Data recipe (exact, reproducible)
+### Data
 
-`pace.data.prepare_sft` rebuilds the paper's SFT data byte-for-byte. Defaults:
-`dataset="HuggingFaceTB/smol-smoltalk"`, `max_seq_len=1280`, `subset_ratio=0.5`,
-`seed=42`, using the dataset's native `train` / `test` splits (a fixed seeded
-`random.sample` subset of each). With a SmolLM2 tokenizer this yields the same
-**113,832 train / 11,986 val** tokenized examples used for the figures. Tokenization is
-hand-rolled ChatML — each turn is `<|im_start|>{role}\n{content}<|im_end|>\n` with the
-header and body tokenized separately and `add_special_tokens=False` (so **no BOS** is
-prepended and **no system turn** is injected); labels are `-100` everywhere except the
-assistant turn's **body** (the assistant header is masked). `max_train`/`max_val`
-instead stream a small deterministic first-N slice for a quick self-contained test.
+`prepare_sft` renders each conversation as hand-rolled ChatML
+(`<|im_start|>{role}\n{content}<|im_end|>\n`, header and body tokenized separately, no BOS
+and no injected system turn), masks every non-assistant token to `-100`, and pads to
+`max_seq_len` (1280 in the paper). Example selection is deterministic — the first
+`subset_ratio` of each native split — and the `smol-smoltalk` revision is pinned, so the
+prepared dataset is reproducible across runs and machines.
+
+## Reproducing the paper
+
+The repository ships no result data and no plotting code — only the optimizer, the
+training pipeline, and a static map from each paper figure to the exact training configs.
+`pace-figure` expands a figure into the `pace-train` commands that produce its runs:
+
+```bash
+uv run pace-figure fig=list         # the figure catalog
+uv run pace-figure fig=fig1         # print the pace-train commands for Figure 1
+```
+
+Each figure config (`src/pace_figures/conf/fig/<id>.yaml`) lists its curves; every curve is
+a complete training spec. Figure 1 (best configuration per method) uses:
+
+| model | PACE lr | PACE c | PACE κ | baselines |
+|-------|---------|--------|--------|-----------|
+| SmolLM2-1.7B | 1e-3 | 0.15 | 0.2 | AdamW / EMA on cosine decay |
+| Qwen3-1.7B | 5e-4 | 0.25 | 0.5 | AdamW / EMA on cosine decay |
+| Gemma3-1B | 1e-3 | 0.15 | 0.5 | AdamW / EMA on cosine decay |
+
+The map fixes the optimizer hyperparameters, schedule, and seed. The fine-tuning figures
+run end-to-end through the shipped SFT trainer; the GPT-2 / FineWeb pretraining figures
+(Fig 5, 9, 18–20) are catalogued for reference but were produced with a separate
+pretraining pipeline that is not included here. The exact per-run configurations behind
+the figures (including effective batch size) are recorded in the bundled result fixtures
+under `tests/fixtures/results/`.
+
+Every console command also runs as a module: `python -m pace.train …` and
+`python -m pace_figures.reproduce fig=…`.
 
 ## Tests
 
 ```bash
-uv run pytest -q                   # offline: optimizer math + result alignment
+uv run pytest -q                    # offline: optimizer math + result alignment
 ```
 
-Two tests cover what matters, plus an optional end-to-end run:
+- **`tests/test_optimizer_math.py`** — optimizer correctness. Drives AdamW, EMA, and PACE
+  with a fixed gradient sequence on CPU and checks the Adam moments, the EMA accumulator,
+  the pullback gain, and the parameter update, step by step, against an independent
+  float64 reference. Deterministic; no GPU, network, or data.
+- **`tests/test_result_fixtures.py`** — empirical alignment. Validates the two bundled real
+  PACE runs (SmolLM2-135M and SmolLM2-1.7B): correct structure, genuine PACE runs, and
+  recorded train and validation losses that match the figures and decrease. Offline.
 
-- `tests/test_optimizer_math.py` — **optimizer correctness.** Drives AdamW, EMA, and
-  PACE with a fixed gradient sequence on CPU and checks the internal state (Adam moments,
-  EMA accumulator, pullback gain) and the parameter update, step by step, against an
-  independent float64 reference. Deterministic; no GPU or data.
-- `tests/test_result_fixtures.py` — **empirical alignment.** Validates the two bundled
-  real PACE runs (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B):
-  correct structure, genuine PACE runs, and recorded train and validation losses that
-  match the figures and decrease. Offline; no GPU.
-- `tests/test_train_smoke.py` *(optional, needs network/GPU)* — end-to-end run that also
-  exercises the data and training pipeline. Downloads a model and
-  smol-smoltalk from HuggingFace and runs PACE through `pace.train`, then checks the
-  final train and validation losses against a committed reference within `PACE_SMOKE_TOL`
-  (the default tolerance is generous, as same-seed runs differ across hardware). The run
-  length is configurable through environment variables:
-  ```bash
-  uv run pytest tests/test_train_smoke.py                       # SmolLM2-135M, 20 steps
-  PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py   # train longer
-  PACE_TEST_TRAIN=all PACE_TEST_STEPS=1778 PACE_TEST_BIG=1 \
-      uv run pytest tests/test_train_smoke.py                   # full-scale, incl. 1.7B
-  ```
-
-Anything runnable as a console command also runs as a module:
-`python -m pace.train …` and `python -m pace_figures.reproduce fig=…`.
+An optional end-to-end test, `tests/test_train_smoke.py`, downloads a model and exercises
+the full data and training pipeline (needs network and a GPU); see the file for the
+environment variables that control its length.
 
 ## Citation
 
-Paper: [Training for the Model You Return: Improving Optimization for
-Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086) (arXiv:2606.25086).
-
 ```bibtex
 @article{au2026pace,
-  title         = {Training for the Model You Return: Improving Optimization for
-                   Iterate-Averaged Language Models},
-  author        = {Au, Kwok Chun and Block, Adam},
-  journal       = {arXiv preprint arXiv:2606.25086},
-  year          = {2026},
-  eprint        = {2606.25086},
-  archivePrefix = {arXiv},
-  primaryClass  = {cs.LG},
-  url           = {https://arxiv.org/abs/2606.25086}
+  title  = {Training for the Model You Return: Improving Optimization for
+            Iterate-Averaged Language Models},
+  author = {Au, Kwok Chun and Block, Adam},
+  journal = {arXiv preprint arXiv:2606.25086},
+  year   = {2026},
+  url    = {https://arxiv.org/abs/2606.25086}
 }
 ```
 

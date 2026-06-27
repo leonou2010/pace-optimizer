@@ -1,28 +1,33 @@
 """Dataset loading and preparation for PACE training.
 
 Training consumes a tokenized dataset saved with HuggingFace ``datasets``
-(``save_to_disk``) under ``<path>/train`` and ``<path>/val``, where each example
-has ``input_ids``, ``attention_mask``, and ``labels`` (with non-assistant tokens
-masked to ``-100``), padded to a fixed ``max_seq_len``.
+(``save_to_disk``) under ``<path>/train`` and ``<path>/val``; each example has
+``input_ids``, ``attention_mask`` and ``labels`` (non-assistant tokens masked to
+``-100``), padded to a fixed ``max_seq_len``.
 
 ``prepare_sft`` builds such a dataset from a HuggingFace chat dataset (e.g.
-``HuggingFaceTB/smol-smoltalk``). ``load_prepared`` loads an existing one.
+``HuggingFaceTB/smol-smoltalk``); ``load_prepared`` loads an existing one.
 
-The tokenization here is byte-for-byte the recipe used for the paper's SFT runs:
-each turn is rendered as hand-rolled ChatML ``<|im_start|>{role}\n{content}<|im_end|>\n``
-with the header and body tokenized separately and ``add_special_tokens=False`` (so no
-BOS is prepended and no system turn is injected); labels are ``-100`` everywhere
-except the assistant turn's body (the assistant *header* is masked too). The paper
-SmolLM2/smol-smoltalk data uses ``max_seq_len=1280``, ``subset_ratio=0.5``,
-``seed=42``, and the dataset's native ``train`` / ``test`` splits.
+Tokenization follows the paper's SFT recipe: each turn is rendered as hand-rolled
+ChatML ``<|im_start|>{role}\n{content}<|im_end|>\n`` with the header and body
+tokenized separately and ``add_special_tokens=False`` (no BOS is prepended and no
+system turn is injected); labels are ``-100`` everywhere except the assistant turn's
+body (the assistant header is masked). Example selection is deterministic — the first
+``subset_ratio`` of each native split, in order — and the dataset revision is pinned,
+so re-running ``prepare_sft`` always produces identical data. The exact configurations
+behind the paper figures are recorded in the bundled result fixtures
+(``tests/fixtures/results/``).
 """
 
 import os
-import random
 from typing import Optional, Tuple
 
 import torch
 from datasets import load_from_disk
+
+# Pinned revision of HuggingFaceTB/smol-smoltalk, so prepared data is stable over time.
+SMOLTALK_REPO = "HuggingFaceTB/smol-smoltalk"
+SMOLTALK_REVISION = "f73fe857d519ff6ac5af2ea67c4d3834da7b8bcc"
 
 
 def collate_fn(batch):
@@ -42,16 +47,6 @@ def load_prepared(path: str, max_samples: Optional[int] = None) -> Tuple:
     return train_ds, val_ds
 
 
-def _set_seed(seed: int):
-    random.seed(seed)
-    try:
-        import numpy as np
-        np.random.seed(seed)
-    except Exception:
-        pass
-    torch.manual_seed(seed)
-
-
 def tokenize_conversation(messages, tokenizer, max_seq_len):
     """Tokenize a conversation with response-only masking (hand-rolled ChatML).
 
@@ -63,7 +58,7 @@ def tokenize_conversation(messages, tokenizer, max_seq_len):
     for msg in messages:
         role = msg.get("role") or msg.get("from")
         content = msg.get("content") or msg.get("value")
-        # ShareGPT-style role names map onto the ChatML roles.
+        # ShareGPT-style role names ("gpt") map onto the ChatML "assistant" role.
         is_assistant = role in ("assistant", "gpt")
 
         header_ids = tokenizer.encode(f"<|im_start|>{role}\n", add_special_tokens=False)
@@ -88,14 +83,14 @@ def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
     out_ids, out_attn, out_labels, skipped = [], [], [], 0
     for ex in rows:
         messages = ex.get("messages") or ex.get("conversations")
-        # Skip rows with no assistant content to supervise (matches the paper recipe).
+        # Skip rows with no assistant content to supervise.
         if not messages or not any(
             (m.get("role") or m.get("from")) in ("assistant", "gpt") for m in messages
         ):
             skipped += 1
             continue
         ids, attn, labels = tokenize_conversation(messages, tokenizer, max_seq_len)
-        if len(ids) < 10 or all(l == -100 for l in labels):
+        if len(ids) < 10 or all(label == -100 for label in labels):
             skipped += 1
             continue
         out_ids.append(ids)
@@ -118,69 +113,57 @@ def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
 def prepare_sft(
     out_dir: str,
     tokenizer_name: str,
-    dataset_name: str = "HuggingFaceTB/smol-smoltalk",
+    dataset_name: str = SMOLTALK_REPO,
     max_seq_len: int = 1280,
-    subset_ratio: float = 0.5,
-    seed: int = 42,
-    max_train: int | None = None,
-    max_val: int | None = None,
+    subset_ratio: float = 1.0,
+    revision: Optional[str] = None,
+    max_train: Optional[int] = None,
+    max_val: Optional[int] = None,
 ) -> str:
     """Build a tokenized, response-masked SFT dataset and save it to ``out_dir``.
 
-    Reproduces the paper's SFT data exactly (see module docstring). With the
-    defaults (``max_seq_len=1280``, ``subset_ratio=0.5``, ``seed=42``,
-    ``dataset_name='HuggingFaceTB/smol-smoltalk'``) and a SmolLM2 tokenizer this
-    yields the same 113832-train / 11986-val tokenized split used for the figures.
-
-    ``subset_ratio`` takes a fixed, seeded ``random.sample`` fraction of the dataset's
-    native ``train`` / ``test`` splits. ``max_train`` / ``max_val`` instead stream a
-    deterministic first-N slice (avoiding a full download) for a self-contained test;
-    the per-conversation tokenization is identical in both cases.
+    Selection is deterministic: the first ``subset_ratio`` of the dataset's native
+    ``train`` / ``test`` splits, in order. For ``HuggingFaceTB/smol-smoltalk`` the
+    revision is pinned (``SMOLTALK_REVISION``) unless ``revision`` is given, so the
+    prepared data is reproducible. ``max_train`` / ``max_val`` instead stream a small
+    first-N slice (avoiding a full download) for a self-contained test; the
+    per-conversation tokenization is identical in both paths.
     """
-    from datasets import Dataset, load_dataset
+    from datasets import load_dataset
     from transformers import AutoTokenizer
+
+    rev = revision if revision is not None else (
+        SMOLTALK_REVISION if dataset_name == SMOLTALK_REPO else None)
 
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
     if max_train:
-        # Streamed slice: take the first-N rows of each native split (deterministic,
-        # avoids a full download). Tokenization is identical to the full path.
+        # Streamed first-N slice (no full download); used for the self-contained test.
         n_val = max_val or max(1, max_train // 4)
-        train_stream = load_dataset(dataset_name, split="train", streaming=True)
+        train_stream = load_dataset(dataset_name, split="train", streaming=True, revision=rev)
         train_rows = [r for _, r in zip(range(max_train), train_stream)]
         try:
-            val_stream = load_dataset(dataset_name, split="test", streaming=True)
+            val_stream = load_dataset(dataset_name, split="test", streaming=True, revision=rev)
         except Exception:
-            val_stream = load_dataset(dataset_name, split="train", streaming=True)
+            val_stream = load_dataset(dataset_name, split="train", streaming=True, revision=rev)
         val_rows = [r for _, r in zip(range(n_val), val_stream)]
     else:
-        ds = load_dataset(dataset_name)
+        ds = load_dataset(dataset_name, revision=rev)
         train_split = ds["train"]
-        if "test" in ds:
-            val_split = ds["test"]
-        elif "validation" in ds:
-            val_split = ds["validation"]
-        else:
-            val_split = None
-        # Fixed seeded subsets of the native splits (exact paper recipe: sample
-        # train first, then val, after seeding the `random` module).
-        _set_seed(seed)
+        val_split = ds.get("test") or ds.get("validation")
         n_train = int(len(train_split) * subset_ratio)
-        train_idx = sorted(random.sample(range(len(train_split)), n_train))
         if val_split is not None:
             n_val = int(len(val_split) * subset_ratio)
-            val_idx = sorted(random.sample(range(len(val_split)), n_val))
-            train_rows = train_split.select(train_idx)
-            val_rows = val_split.select(val_idx)
+            train_rows = train_split.select(range(n_train))
+            val_rows = val_split.select(range(n_val))
         else:
-            # No native eval split: hold out a fraction of train.
-            n_val = max(1, int(len(train_split) * subset_ratio * 0.05))
-            remaining = sorted(set(range(len(train_split))) - set(train_idx))
-            val_idx = sorted(random.sample(remaining, min(n_val, len(remaining))))
-            train_rows = train_split.select(train_idx)
-            val_rows = train_split.select(val_idx)
+            # No native eval split: hold out the last 5% of train for validation.
+            n_val = max(1, int(len(train_split) * 0.05))
+            cut = len(train_split) - n_val
+            train_rows = train_split.select(range(min(n_train, cut)))
+            val_rows = train_split.select(range(cut, len(train_split)))
 
     sample = train_rows[0] if len(train_rows) else {}
     if not (sample.get("messages") or sample.get("conversations")):
@@ -196,3 +179,25 @@ def prepare_sft(
     train_ds.save_to_disk(os.path.join(out_dir, "train"))
     val_ds.save_to_disk(os.path.join(out_dir, "val"))
     return out_dir
+
+
+def main():
+    """CLI: ``pace-data --out data/smoltalk --tokenizer HuggingFaceTB/SmolLM2-1.7B``."""
+    import argparse
+
+    p = argparse.ArgumentParser(description="Prepare a tokenized SFT dataset for pace-train.")
+    p.add_argument("--out", required=True, help="output directory (writes <out>/train and <out>/val)")
+    p.add_argument("--tokenizer", required=True, help="HuggingFace tokenizer/model name")
+    p.add_argument("--dataset", default=SMOLTALK_REPO, help="HuggingFace chat dataset")
+    p.add_argument("--max-seq-len", type=int, default=1280)
+    p.add_argument("--subset-ratio", type=float, default=1.0)
+    p.add_argument("--revision", default=None, help="pin a dataset revision")
+    args = p.parse_args()
+    out = prepare_sft(args.out, tokenizer_name=args.tokenizer, dataset_name=args.dataset,
+                      max_seq_len=args.max_seq_len, subset_ratio=args.subset_ratio,
+                      revision=args.revision)
+    print(f"Saved prepared dataset to {out}/")
+
+
+if __name__ == "__main__":
+    main()

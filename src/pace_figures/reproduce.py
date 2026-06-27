@@ -8,9 +8,9 @@ emit the result JSONs.
     pace-figure fig=fig1 run=true data=/path/to/smoltalk   # train them -> result JSONs
 
 Each figure config (conf/fig/<id>.yaml) lists its curves; every curve is a
-complete training spec, so the printed command is exactly what a normal user
-would run with `pace-train`. There is no bundled data and no plotting: the output
-is the configs (or, with +run, the result JSONs).
+complete training spec, so the printed command is what a user would run with
+`pace-train`. There is no bundled data and no plotting: the output is the configs
+(or, with `run=true`, the result JSONs).
 """
 
 import os

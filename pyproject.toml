@@ -43,6 +43,7 @@ experiments = [
 [project.scripts]
 pace-train = "pace.train:main"
 pace-figure = "pace_figures.reproduce:main"
+pace-data = "pace.data:main"
 
 [build-system]
 requires = ["hatchling"]
