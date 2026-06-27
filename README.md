@@ -2,15 +2,14 @@
 
 📄 Paper: **[Training for the Model You Return: Improving Optimization for Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086)** (Au & Block, 2026 · arXiv:2606.25086)
 
-Many language-model pipelines return an **exponential moving average (EMA)** of the
-training iterates rather than the final weights. PACE starts from the question: *given
-that the model we return is an average, how should training change to improve that
-average?* The paper formulates this as an optimal-control problem; **PACE** is a
-practical approximation of the resulting controller — a lightweight wrapper around
-AdamW that pulls the live weights toward their EMA with a **clipped, per-coordinate
-control strength**. The paper reports that PACE improves over AdamW and EMA-evaluated
-AdamW in supervised fine-tuning of 1–2B-parameter LMs and in GPT-2 pretraining on
-FineWeb, across a range of learning rates, decay schedules, and other hyperparameters.
+**PACE** is a small wrapper around AdamW. During training it nudges the weights
+toward an exponential moving average (EMA) of recent weights — per-coordinate, with
+a clipped strength.
+
+A lot of LM pipelines return that EMA instead of the final weights. PACE trains in a
+way that makes the returned average better. In the paper it beats AdamW and
+EMA-evaluated AdamW on 1–2B fine-tuning and on GPT-2 / FineWeb pretraining, across a
+range of learning rates and schedules.
 
 ```
 theta_{t+1} = (theta_t - AdamW_step) + lambda_{t,i} * (ema_{t-1} - theta_t)
