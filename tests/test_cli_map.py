@@ -29,10 +29,21 @@ def test_every_fig_config_is_in_the_catalog():
         assert fid in catalog, f"figure config '{fid}' missing from FIGMAP.yaml"
 
 
-def test_curves_expand_to_wellformed_commands():
+def _all_curves(cfg):
+    """Every run a figure expands to: explicit curves + expanded sweep(s)."""
+    curves = list(cfg.get("curves", []) or [])
+    sweeps = ([cfg["sweep"]] if cfg.get("sweep") else []) + list(cfg.get("sweeps", []) or [])
+    for sw in sweeps:
+        curves += reproduce._expand_sweep(sw)
+    return curves
+
+
+def test_every_figure_expands_to_wellformed_commands():
     for fid in _config_ids():
         cfg = OmegaConf.load(FIGURES / "conf" / "fig" / f"{fid}.yaml")
-        for c in cfg.get("curves", []) or []:
+        curves = _all_curves(cfg)
+        assert curves, f"{fid}: no curves and no sweep -> nothing to reproduce"
+        for c in curves:
             cmd = reproduce._command(cfg, c, [])
             assert cmd[0] == "pace-train"
             joined = " ".join(cmd)

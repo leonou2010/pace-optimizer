@@ -1,0 +1,31 @@
+id: fig_appendix_pretrain_river
+paper: "Fig 20"
+desc: "GPT-2-124M FineWeb pretraining token-budget comparison: WSD decay branches vs PACE constant"
+dataset: fineweb
+
+# Token-budget figure. Each method (AdamW / EMA / PACE) is trained with WSD decay
+# branches at token budgets {50%, 75%, 100%} of the full 4750-step run, at eta=2e-3
+# (the matched WSD-sweep cell: EMA/PACE kappa=0.25, PACE c=0.003). These are overlaid
+# on a single PACE constant-LR trajectory (c=0.002, kappa=0.5). Schedule-Free dropped.
+#
+# NOTE: the only knob distinguishing the three branches of a method is the WSD decay
+# *token budget* (where the decay starts), which the SFT trainer does not expose as a
+# flag — so all branches share the same `schedule=wsd` spec below. Budgets annotated in
+# comments; full-budget (100%) is the canonical wsd_*_lr0.002 run.
+
+curves:
+  # ---- WSD decay branches (eta=2e-3, matched cell kappa=0.25, PACE c=0.003) ----
+  # AdamW WSD, budgets 50% / 75% / 100%
+  - {model: gpt2_124m, method: AdamW, schedule: wsd, seed: 42, optimizer: {name: adamw, lr: 0.002, lambda_pullback: 0.0}}   # 50% budget (b2375)
+  - {model: gpt2_124m, method: AdamW, schedule: wsd, seed: 42, optimizer: {name: adamw, lr: 0.002, lambda_pullback: 0.0}}   # 75% budget (b3563)
+  - {model: gpt2_124m, method: AdamW, schedule: wsd, seed: 42, optimizer: {name: adamw, lr: 0.002, lambda_pullback: 0.0}}   # 100% budget (b4750)
+  # EMA WSD, budgets 50% / 75% / 100%
+  - {model: gpt2_124m, method: EMA, schedule: wsd, seed: 42, optimizer: {name: ema, lr: 0.002, lambda_pullback: 0.0, ema_kappa: 0.25}}   # 50% budget (b2375)
+  - {model: gpt2_124m, method: EMA, schedule: wsd, seed: 42, optimizer: {name: ema, lr: 0.002, lambda_pullback: 0.0, ema_kappa: 0.25}}   # 75% budget (b3563)
+  - {model: gpt2_124m, method: EMA, schedule: wsd, seed: 42, optimizer: {name: ema, lr: 0.002, lambda_pullback: 0.0, ema_kappa: 0.25}}   # 100% budget (b4750)
+  # PACE WSD, budgets 50% / 75% / 100%
+  - {model: gpt2_124m, method: PACE, schedule: wsd, seed: 42, optimizer: {name: pace, lr: 0.002, lambda_pullback: 0.003, ema_kappa: 0.25}}   # 50% budget (b2375)
+  - {model: gpt2_124m, method: PACE, schedule: wsd, seed: 42, optimizer: {name: pace, lr: 0.002, lambda_pullback: 0.003, ema_kappa: 0.25}}   # 75% budget (b3563)
+  - {model: gpt2_124m, method: PACE, schedule: wsd, seed: 42, optimizer: {name: pace, lr: 0.002, lambda_pullback: 0.003, ema_kappa: 0.25}}   # 100% budget (b4750)
+  # ---- PACE constant-LR reference trajectory (c=0.002, kappa=0.5) ----
+  - {model: gpt2_124m, method: PACE, schedule: const, seed: 42, optimizer: {name: pace, lr: 0.002, lambda_pullback: 0.002, ema_kappa: 0.5}}

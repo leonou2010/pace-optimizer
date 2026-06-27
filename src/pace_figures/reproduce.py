@@ -51,7 +51,35 @@ def _command(fig, curve, extra):
     ]
     if o.get("ema_kappa") is not None:
         parts.append(f"optimizer.ema_kappa={o['ema_kappa']}")
+    if o.get("ema_update_freq") is not None:
+        parts.append(f"optimizer.ema_update_freq={o['ema_update_freq']}")
     return parts + list(extra)
+
+
+def _expand_sweep(sw):
+    """Expand a compact `sweep` block (cartesian product of `grid` over `base`)
+    into the same list-of-curves form `_command` consumes. Grid keys may be dotted
+    (e.g. `optimizer.lr`) or plain (`schedule`, `seed`, `model`). A figure may carry
+    one `sweep`, a list of `sweeps`, and/or an explicit `curves` list."""
+    import itertools
+    base = sw.get("base", {})
+    grid = {k: list(v) for k, v in (sw.get("grid", {}) or {}).items()}
+    keys = list(grid)
+    combos = itertools.product(*[grid[k] for k in keys]) if keys else [()]
+    out = []
+    for combo in combos:
+        c = {"model": sw["model"], "method": base.get("method", "PACE"),
+             "schedule": base.get("schedule", "const"), "seed": base.get("seed", 42),
+             "optimizer": dict(base.get("optimizer", {}))}
+        for k, v in zip(keys, combo):
+            if k.startswith("optimizer."):
+                c["optimizer"][k.split(".", 1)[1]] = v
+            elif k in ("schedule", "seed", "model", "method"):
+                c[k] = v
+            else:
+                c["optimizer"][k] = v
+        out.append(c)
+    return out
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="reproduce")
@@ -62,6 +90,9 @@ def main(cfg: DictConfig):
         return
 
     curves = list(fig.get("curves", []) or [])
+    sweeps = ([fig["sweep"]] if fig.get("sweep") else []) + list(fig.get("sweeps", []) or [])
+    for sw in sweeps:
+        curves += _expand_sweep(sw)
     if not curves:
         print(f"No run specs for '{fig.id}' yet — see the README or `pace-figure fig=list`.")
         return
