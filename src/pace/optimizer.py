@@ -239,7 +239,12 @@ class PACE(torch.optim.Optimizer):
                 v_hat_sqrt = (v / bias_correction2).sqrt_().add_(eps)
 
                 # Save p before update; the pullback references the pre-Adam theta.
-                p_before = p.data.float()
+                # Must be an independent copy: in fp32 ``.float()`` returns the same
+                # tensor, so the in-place weight-decay/Adam steps below would otherwise
+                # also mutate this snapshot and the pullback would reference the
+                # post-Adam weights. ``.clone()`` keeps it a true pre-Adam snapshot in
+                # every dtype (a no-op difference for bf16, which already copies).
+                p_before = p.data.clone().float()
 
                 # Weight decay (decoupled, AdamW-style)
                 if weight_decay != 0:

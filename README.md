@@ -163,20 +163,21 @@ instead stream a small deterministic first-N slice for a quick self-contained te
 ## Tests
 
 ```bash
-uv run pytest -q                   # fast: optimizer parity + config map + result fixtures
+uv run pytest -q                   # offline: optimizer math + result alignment
 ```
 
-- `tests/test_optimizer_parity.py` — optimizer correctness: PACE with `c=0` reproduces
-  `torch.optim.AdamW`, the EMA evaluation swap leaves training unchanged, and (when
-  `PACE_REF_OPTIMIZER` is set) PACE is bit-identical to the reference implementation.
-  Runs anywhere; no GPU.
-- `tests/test_cli_map.py` — the figure-to-config reproduction map is complete and every
-  curve expands to a well-formed `pace-train` command.
-- `tests/test_result_fixtures.py` — validates the two bundled PACE result fixtures
-  (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B run): correct
-  structure, genuine PACE runs, and recorded train and validation losses that match and
-  decrease. Offline; no GPU.
-- `tests/test_train_smoke.py` — end-to-end training test: downloads a model and
+Two tests cover what matters, plus an optional end-to-end run:
+
+- `tests/test_optimizer_math.py` — **optimizer correctness.** Drives AdamW, EMA, and
+  PACE with a fixed gradient sequence on CPU and checks the internal state (Adam moments,
+  EMA accumulator, pullback gain) and the parameter update, step by step, against an
+  independent float64 reference. Deterministic; no GPU or data.
+- `tests/test_result_fixtures.py` — **empirical alignment.** Validates the two bundled
+  real PACE runs (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B):
+  correct structure, genuine PACE runs, and recorded train and validation losses that
+  match the figures and decrease. Offline; no GPU.
+- `tests/test_train_smoke.py` *(optional, needs network/GPU)* — end-to-end run that also
+  exercises the data and training pipeline. Downloads a model and
   smol-smoltalk from HuggingFace and runs PACE through `pace.train`, then checks the
   final train and validation losses against a committed reference within `PACE_SMOKE_TOL`
   (the default tolerance is generous, as same-seed runs differ across hardware). The run
