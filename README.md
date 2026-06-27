@@ -2,12 +2,15 @@
 
 📄 Paper: **[Training for the Model You Return: Improving Optimization for Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086)** (Au & Block, 2026 · arXiv:2606.25086)
 
-**PACE** is a drop-in AdamW variant for language-model training. It adds a small,
-per-coordinate *pullback* toward an exponential moving average (EMA) of the
-iterates; the pullback gain is scaled by the learning rate and inversely by the
-Adam second-moment estimate. The effect is that PACE trains well at a **constant
-learning rate** and matches or beats carefully decayed AdamW/EMA baselines — no
-learning-rate schedule to tune.
+Many language-model pipelines return an **exponential moving average (EMA)** of the
+training iterates rather than the final weights. PACE starts from the question: *given
+that the model we return is an average, how should training change to improve that
+average?* The paper formulates this as an optimal-control problem; **PACE** is a
+practical approximation of the resulting controller — a lightweight wrapper around
+AdamW that pulls the live weights toward their EMA with a **clipped, per-coordinate
+control strength**. The paper reports that PACE improves over AdamW and EMA-evaluated
+AdamW in supervised fine-tuning of 1–2B-parameter LMs and in GPT-2 pretraining on
+FineWeb, across a range of learning rates, decay schedules, and other hyperparameters.
 
 ```
 theta_{t+1} = (theta_t - AdamW_step) + lambda_{t,i} * (ema_{t-1} - theta_t)
@@ -40,9 +43,9 @@ validate(model)
 opt.train()   # swap back to the training weights
 ```
 
-Setting `lambda_pullback=0` makes the update **bit-identical to `torch.optim.AdamW`**;
-adding `use_ema_eval=True` gives the EMA-evaluation baseline. PACE is a strict
-superset of both.
+Setting `lambda_pullback=0` reduces PACE to AdamW — matching `torch.optim.AdamW` up
+to floating-point ordering (~1e-6 in the parity test); adding `use_ema_eval=True` then
+recovers the EMA-evaluated baseline. So PACE generalizes both.
 
 ## Reproduce the paper
 

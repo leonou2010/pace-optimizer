@@ -1,3 +1,7 @@
+# FineWeb pretraining corpus (GPT-2 pretraining)
+# https://huggingface.co/datasets/HuggingFaceFW/fineweb
 name: HuggingFaceFW/fineweb
+url: https://huggingface.co/datasets/HuggingFaceFW/fineweb
+# Prepare a tokenized dataset, then override: dataset.path=/path/to/data
 path: ???
 max_samples: null

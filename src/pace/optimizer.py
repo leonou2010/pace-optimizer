@@ -24,7 +24,8 @@ Update (per coordinate ``i`` at step ``t``)::
 
 Special cases:
   * ``lambda_pullback == 0`` and ``use_ema_eval == False`` -> the EMA buffer is
-    never allocated and the update is **bit-identical to** ``torch.optim.AdamW``.
+    never allocated and the update reduces to AdamW (matching
+    ``torch.optim.AdamW`` up to floating-point ordering).
   * ``lambda_pullback == 0`` and ``use_ema_eval == True``  -> training follows
     plain AdamW; evaluation swaps in the EMA weights (the "EMA" baseline).
   * ``lambda_pullback > 0``                                 -> full PACE.

@@ -1,4 +1,7 @@
+# smol-smoltalk SFT dataset
+# https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk
 name: HuggingFaceTB/smol-smoltalk
+url: https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk
 # Path to a prepared (tokenized, prompt-masked) dataset saved with `pace.data.prepare_sft`,
 # containing <path>/train and <path>/val. Override on the CLI: dataset.path=/path/to/data
 path: ???
