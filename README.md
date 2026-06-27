@@ -2,9 +2,9 @@
 
 📄 Paper: **[Training for the Model You Return: Improving Optimization for Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086)** (Au & Block, 2026 · arXiv:2606.25086)
 
-**PACE** is a small wrapper around AdamW. During training it nudges the weights
-toward an exponential moving average (EMA) of recent weights — per-coordinate, with
-a clipped strength.
+**PACE** is a drop-in optimizer (a `torch.optim.Optimizer`) — AdamW plus a small,
+per-coordinate pullback that nudges the weights toward an exponential moving average
+(EMA) of recent weights, with a clipped strength.
 
 In the paper it beats AdamW and EMA-evaluated AdamW on 1–2B fine-tuning and on
 GPT-2 / FineWeb pretraining, across a range of learning rates and schedules.
