@@ -167,9 +167,9 @@ uv run pytest -q                   # fast: optimizer parity + config map + resul
 ```
 
 - `tests/test_optimizer_parity.py` — optimizer correctness: PACE with `c=0` reproduces
-  `torch.optim.AdamW`, the EMA evaluation swap leaves training unchanged, the core
-  imports with torch only, and (when `PACE_REF_OPTIMIZER` is set) PACE is bit-identical
-  to the reference implementation. Runs anywhere; no GPU.
+  `torch.optim.AdamW`, the EMA evaluation swap leaves training unchanged, and (when
+  `PACE_REF_OPTIMIZER` is set) PACE is bit-identical to the reference implementation.
+  Runs anywhere; no GPU.
 - `tests/test_cli_map.py` — the figure-to-config reproduction map is complete and every
   curve expands to a well-formed `pace-train` command.
 - `tests/test_result_fixtures.py` — validates the two bundled PACE result fixtures

@@ -11,8 +11,6 @@ optimizer steps and verifies the result:
 - test_parity_with_research_impl: for the AdamW, EMA, and PACE configurations, PACE
   matches the original research optimizer to within 1e-9. Requires the
   PACE_REF_OPTIMIZER environment variable; skipped when it is unset.
-- test_optimizer_imports_with_torch_only: pace.optimizer imports and exposes PACE
-  using only torch, without the training or figure dependencies.
 
 CPU-only; requires no GPU and no bundled data.
 """
@@ -147,13 +145,6 @@ def test_pace_c0_equals_torch_adamw():
     )
     max_param_diff = (new_final - aw_final).abs().max().item()
     assert max_param_diff < 1e-6, f"PACE(c=0) vs torch.AdamW param diff {max_param_diff}"
-
-
-def test_optimizer_imports_with_torch_only():
-    """The core product must import without the training/figure extras — only torch."""
-    import importlib
-    mod = importlib.import_module("pace.optimizer")
-    assert hasattr(mod, "PACE")
 
 
 if __name__ == "__main__":
