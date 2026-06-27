@@ -6,7 +6,7 @@ dataset: fineweb
 # Strictly-fair shared 33-config-per-schedule grid at eta=2e-3, seed 42:
 # AdamW + EMA(x4 kappa) + PACE(x4 kappa x7 c). One panel per schedule, one line per
 # kappa in {0.1,0.2,0.3,0.5}. AdamW (kappa-independent) and EMA(c=0) anchor the leftmost
-# ticks. Schedule-Free dropped.
+# ticks. non-PACE/AdamW/EMA baselines omitted.
 
 sweeps:
   - {model: gpt2_124m, base: {method: AdamW, optimizer: {name: adamw, lr: 0.002, lambda_pullback: 0.0}, seed: 42},

@@ -7,7 +7,7 @@ dataset: fineweb
 # shared schedule grid (const / WSD). The middle panel is the c-sweep at kappa=0.5,
 # fed by the EXP25 (coarse) + EXP26 (zoom) sweeps over AdamW / EMA(k=0.5) / PACE(k=0.5).
 # Methods: AdamW (lambda_pullback=0, no kappa); EMA (lambda_pullback=0, ema_kappa=k);
-# PACE (lambda_pullback=c, ema_kappa=k). Schedule-Free runs dropped.
+# PACE (lambda_pullback=c, ema_kappa=k). non-PACE/AdamW/EMA baselines omitted.
 
 curves:
   # ---- Left panel: Constant-LR best config per method (lr=2e-3) ----

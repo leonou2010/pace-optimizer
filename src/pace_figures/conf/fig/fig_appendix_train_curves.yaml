@@ -4,7 +4,7 @@ desc: "Training-loss comparison (PACE / AdamW / EMA), SmolLM2-135M & Qwen3-1.7B"
 dataset: smoltalk
 
 # Best-of-method (lowest final val) at each model's matched learning rate, the
-# same runs as the body Fig 4 but plotting train_loss. Schedule-Free is dropped
+# same runs as the body Fig 4 but plotting train_loss. non-PACE/AdamW/EMA baselines omitted.
 # per the PACE-repo rule (only AdamW / EMA / PACE are reproduced here).
 #   SmolLM2-135M: matched lr 5e-3   |   Qwen3-1.7B: matched lr 3e-4
 # Picked configs verified from the fig4 best-of-method selection.

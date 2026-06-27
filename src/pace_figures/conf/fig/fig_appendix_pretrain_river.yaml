@@ -6,7 +6,7 @@ dataset: fineweb
 # Token-budget figure. Each method (AdamW / EMA / PACE) is trained with WSD decay
 # branches at token budgets {50%, 75%, 100%} of the full 4750-step run, at eta=2e-3
 # (the matched WSD-sweep cell: EMA/PACE kappa=0.25, PACE c=0.003). These are overlaid
-# on a single PACE constant-LR trajectory (c=0.002, kappa=0.5). Schedule-Free dropped.
+# on a single PACE constant-LR trajectory (c=0.002, kappa=0.5). non-PACE/AdamW/EMA baselines omitted.
 #
 # NOTE: the only knob distinguishing the three branches of a method is the WSD decay
 # *token budget* (where the decay starts), which the SFT trainer does not expose as a

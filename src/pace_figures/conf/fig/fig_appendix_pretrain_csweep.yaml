@@ -5,7 +5,7 @@ dataset: fineweb
 
 # Strictly-fair shared grid at eta=2e-3: AdamW + EMA(x4 kappa) + PACE(x4 kappa x7 c),
 # run at three seeds {0,1,42}, one line per schedule (const/cos/wsd). Plotted points are
-# best-over-kappa per c. EMA(c=0) and AdamW anchor the leftmost ticks. Schedule-Free dropped.
+# best-over-kappa per c. EMA(c=0) and AdamW anchor the leftmost ticks. non-PACE/AdamW/EMA baselines omitted.
 
 sweeps:
   - {model: gpt2_124m, base: {method: AdamW, optimizer: {name: adamw, lr: 0.002, lambda_pullback: 0.0}},

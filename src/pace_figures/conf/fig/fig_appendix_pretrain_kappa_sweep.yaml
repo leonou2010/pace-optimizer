@@ -5,7 +5,7 @@ dataset: fineweb
 
 # Full EXP25 (coarse) + EXP26 (zoom) const-LR sweep, plotted as final val loss vs c
 # with one panel per kappa. AdamW (kappa-independent) and EMA(c=0) anchor the leftmost
-# ticks; PACE lines sweep c. Schedule-Free dropped. Seed 42, constant LR.
+# ticks; PACE lines sweep c. non-PACE/AdamW/EMA baselines omitted. Seed 42, constant LR.
 
 sweeps:
   # ---- EXP25 coarse grid: kappas {0.2,0.5,0.7} ----
