@@ -54,9 +54,15 @@ validate(model)
 opt.train()   # swap back to the training weights
 ```
 
-Setting `lambda_pullback=0` reduces PACE to AdamW — matching `torch.optim.AdamW` up
-to floating-point ordering (~1e-6 in the parity test); adding `use_ema_eval=True` then
-recovers the EMA-evaluated baseline. So PACE generalizes both.
+Two knobs recover the baselines:
+- `use_ema_eval` chooses what you **return/evaluate** — the EMA weights (`True`) or the
+  final iterate (`False`).
+- `lambda_pullback` (c) chooses whether **training** pulls toward the EMA (`c>0`) or not (`c=0`).
+
+So: `c=0, use_ema_eval=True` → the **EMA baseline** (AdamW training, EMA returned);
+`c=0, use_ema_eval=False` → **plain AdamW** (matches `torch.optim.AdamW` up to
+floating-point ordering, ~1e-6 in the parity test); `c>0` → **PACE**. PACE generalizes
+both baselines.
 
 ## Reproduce the paper
 
