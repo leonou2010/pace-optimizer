@@ -1,0 +1,100 @@
+"""Self-contained training smoke test.
+
+Downloads a model + smol-smoltalk from HuggingFace, runs PACE, and checks the
+result. No bundled data, no cluster paths — it works after `git clone` (needs
+network; uses a GPU if present, else CPU).
+
+How long it runs is up to you, via environment variables (all have defaults):
+
+    PACE_TEST_STEPS=20            # number of optimizer steps to train ("how long")
+    PACE_TEST_TRAIN=512          # training examples ('all' = the full dataset)
+    PACE_TEST_VAL=128            # validation examples ('all' = full); eval is over all of them
+    PACE_TEST_BIG=1              # also run SmolLM2-1.7B (default: SmolLM2-135M only)
+
+The prepared dataset is cached under ~/.cache/pace_test/, so after the first run
+only the training (the part you scale with PACE_TEST_STEPS) repeats. The result is
+a complete JSON ({config, summary, eval_logs, step_logs}) with final_val_loss
+computed over the full prepared validation set.
+
+    uv run pytest tests/test_train_smoke.py
+    PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py    # longer
+    PACE_TEST_TRAIN=all PACE_TEST_STEPS=1778 uv run pytest ...     # full-scale run
+"""
+
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "src"))
+
+STEPS = int(os.environ.get("PACE_TEST_STEPS", "20"))
+TRAIN = os.environ.get("PACE_TEST_TRAIN", "512")
+VAL = os.environ.get("PACE_TEST_VAL", "128")
+CACHE = Path(os.environ.get("PACE_TEST_DATA_CACHE", Path.home() / ".cache" / "pace_test"))
+
+MODELS = [("smollm2_135m", "HuggingFaceTB/SmolLM2-135M")]
+if os.environ.get("PACE_TEST_BIG") == "1":
+    MODELS.append(("smollm2_1.7b", "HuggingFaceTB/SmolLM2-1.7B"))
+
+
+def _prepare_data(hf_model):
+    """Prepare (and cache) a tokenized smol-smoltalk dataset for this model."""
+    n_train = None if TRAIN.lower() == "all" else int(TRAIN)
+    n_val = None if VAL.lower() == "all" else int(VAL)
+    tag = f"{hf_model.split('/')[-1]}_{TRAIN}_{VAL}"
+    out = CACHE / tag
+    if (out / "train").exists() and (out / "val").exists():
+        return out
+    try:
+        from pace.data import prepare_sft
+        prepare_sft(str(out), tokenizer_name=hf_model,
+                    dataset_name="HuggingFaceTB/smol-smoltalk",
+                    max_seq_len=512, max_train=n_train, max_val=n_val)
+    except Exception as e:
+        pytest.skip(f"could not fetch model/data from HuggingFace: {e}")
+    return out
+
+
+@pytest.mark.parametrize("cfg_name,hf_model", MODELS)
+def test_pace_trains(cfg_name, hf_model, tmp_path):
+    data_dir = _prepare_data(hf_model)
+    run_dir = tmp_path / "run"
+    env = dict(os.environ, PYTHONPATH=str(REPO / "src"), PACE_RUN_DIR=str(run_dir))
+    cmd = [
+        sys.executable, "-m", "pace.train",
+        f"model={cfg_name}", "optimizer=pace", "schedule=const",
+        f"dataset.path={data_dir}",
+        "training.batch_size=2", "training.gradient_accumulation_steps=1",
+        f"training.max_steps={STEPS}",
+        f"training.eval_interval={max(1, STEPS // 2)}",
+        # eval_samples left at its default (null) -> final eval over the FULL val set
+        "schedule.warmup_steps=1", "seed=42",
+    ]
+    r = subprocess.run(cmd, env=env, cwd=str(REPO), capture_output=True, text=True)
+    assert r.returncode == 0, f"pace-train failed:\n{r.stdout[-2000:]}\n{r.stderr[-2000:]}"
+
+    js = [j for j in run_dir.rglob("*.json") if "hydra" not in str(j)]
+    assert js, "no result JSON written"
+    d = json.load(open(js[-1]))
+
+    assert {"config", "summary", "eval_logs"} <= set(d), "bad result schema"
+    assert d["config"]["optimizer"]["lambda_pullback"] > 0, "not a PACE run"
+    fv = d["summary"]["final_val_loss"]
+    assert fv == fv and fv < 100, f"final_val_loss not finite/sane: {fv}"
+    assert d["eval_logs"], "no eval logs"
+    last = d["eval_logs"][-1]
+    assert last.get("ema_val_loss") is not None, "EMA eval not populated"
+    assert "lambda_clipped_frac" in last, "PACE lambda stats missing"
+    print(f"[{cfg_name}] steps={STEPS} train={TRAIN} val={VAL} -> "
+          f"final_val_loss={fv:.4f} lambda_clipped_frac={last['lambda_clipped_frac']:.4f}")
+
+
+if __name__ == "__main__":
+    for cfg_name, hf_model in MODELS:
+        data_dir = _prepare_data(hf_model)
+        print(f"prepared data for {cfg_name} at {data_dir}; run via pytest to train.")

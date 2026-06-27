@@ -48,19 +48,29 @@ recovers the EMA-evaluated baseline. So PACE generalizes both.
 
 ## Reproduce the paper
 
-The repo ships **no result data and no plots** — only the optimizer, a training
-pipeline, and a **static map** from each paper figure to the exact training
-configs. See [REPRODUCE.md](REPRODUCE.md). In short:
+The repo ships **no result data and no plots** — only the optimizer, the training
+pipeline, and a **static map** from each paper figure to the exact training configs.
+Reproducing a figure means training its runs and reading the result JSONs.
 
 ```bash
 uv sync --extra experiments        # training + reproduction deps
-pace-figure fig=list               # the figure catalog
-pace-figure fig=fig1               # print the exact pace-train commands for Fig 1
+uv run pace-figure fig=list        # the figure catalog
+uv run pace-figure fig=fig1        # print the exact pace-train commands for Fig 1
 ```
 
-Each figure config (`figures/conf/fig/<id>.yaml`) lists its runs; every run is a
-normal `pace-train` invocation, so reproducing a figure is just training those
-configs and reading the result JSONs.
+Each figure config (`src/pace_figures/conf/fig/<id>.yaml`) lists its curves; every
+curve is a complete `pace-train` spec. For example Fig 1's nine runs (baselines use
+their best decay schedule, PACE uses a constant LR):
+
+| model | method | lr | c | kappa | schedule |
+|-------|--------|----|---|-------|----------|
+| SmolLM2-1.7B | AdamW / EMA / PACE | 1e-3 | – / 0 / 0.15 | – / 0.5 / 0.2 | cos / cos / const |
+| Qwen3-1.7B | AdamW / EMA / PACE | 5e-4 | – / 0 / 0.25 | – / 0.5 / 0.5 | cos / cos / const |
+| Gemma3-1B | AdamW / EMA / PACE | 1e-3 | – / 0 / 0.15 | – / 0.5 / 0.5 | cos / cos / const |
+
+Expected PACE `final_val_loss`: 0.6911 / 0.7103 / 0.8576. Train them with
+`uv run pace-figure fig=fig1 run=true data=<prepared dataset>` or by running the
+printed commands.
 
 ## Train
 
@@ -81,24 +91,35 @@ A run writes `{config, summary, eval_logs}` as JSON under `runs/`;
 ## Tests
 
 ```bash
-uv run pytest -q                   # config map + standalone gate + optimizer parity
+uv run pytest -q                   # fast: optimizer parity + config map + standalone gate
 ```
 
-`tests/test_optimizer_parity.py` checks `c=0 == torch.AdamW` and that the EMA
-eval-swap never perturbs training (and, if `PACE_REF_OPTIMIZER` points at a
-reference implementation, bit-identical parity). `tests/test_cli_map.py` and
-`tests/test_standalone.py` check the reproduction map and that the repo is
-lightweight and self-contained. A few-step GPU training check is in
-`tests/smoke_train.py`.
+- `tests/test_optimizer_parity.py` — `c=0 == torch.AdamW` (up to fp ordering) and that
+  the EMA eval-swap never perturbs training (plus bit-identical parity vs a reference
+  if `PACE_REF_OPTIMIZER` is set). Torch-only, runs anywhere.
+- `tests/test_cli_map.py`, `tests/test_standalone.py` — the reproduction map is complete
+  and the repo is lightweight/self-contained.
+- `tests/test_train_smoke.py` — **self-contained training test**: downloads a model +
+  smol-smoltalk from HuggingFace and runs PACE end-to-end (no bundled data). You choose
+  how long via env vars:
+  ```bash
+  uv run pytest tests/test_train_smoke.py                       # SmolLM2-135M, 20 steps
+  PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py   # train longer
+  PACE_TEST_TRAIN=all PACE_TEST_STEPS=1778 PACE_TEST_BIG=1 \
+      uv run pytest tests/test_train_smoke.py                   # full-scale, incl. 1.7B
+  ```
+
+Anything runnable as a console command also runs as a module:
+`python -m pace.train …` and `python -m pace_figures.reproduce fig=…`.
 
 ## Relation to prior work
 
 PACE's iterate-averaging component builds on the line of work on EMA / averaged
-optimizers for language models, in particular BEMA (Block & Zhang, 2025) and the
-broader literature on iterate averaging (Polyak–Ruppert). PACE differs in that the
-averaging is coupled to the optimizer step through a learning-rate-scaled,
-per-coordinate pullback, which is what enables strong constant-learning-rate
-training.
+optimizers for language models, in particular **BEMA** (Block & Zhang, 2025 —
+[paper](https://arxiv.org/abs/2508.00180), [code](https://github.com/abblock/bema))
+and the broader literature on iterate averaging (Polyak–Ruppert). PACE differs in
+that the averaging is coupled to the optimizer step through a learning-rate-scaled,
+per-coordinate pullback.
 
 ## Citation
 

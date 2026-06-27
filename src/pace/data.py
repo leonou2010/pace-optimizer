@@ -40,40 +40,69 @@ def prepare_sft(
     max_seq_len: int = 1280,
     val_size: int = 6000,
     seed: int = 42,
+    max_train: int | None = None,
+    max_val: int | None = None,
 ) -> str:
     """Build a tokenized, prompt-masked SFT dataset and save it to ``out_dir``.
 
     Each conversation is rendered with the tokenizer's chat template; tokens that
     belong to the user turns are masked to ``-100`` so the loss is computed only
     on the assistant responses. Sequences are padded/truncated to ``max_seq_len``.
+
+    ``max_train`` / ``max_val`` cap the number of examples (streamed, so only a
+    small slice is downloaded) — handy for a quick self-contained smoke test.
     """
-    from datasets import load_dataset
+    from datasets import Dataset, load_dataset
     from transformers import AutoTokenizer
 
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
+    if tok.chat_template is None:
+        # Base-model tokenizers often have no chat template; use a ChatML default
+        # so SFT conversations can be rendered.
+        tok.chat_template = (
+            "{% for message in messages %}"
+            "{% if loop.first and messages[0]['role'] != 'system' %}"
+            "{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}"
+            "{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
+        )
 
-    ds = load_dataset(dataset_name)
-    if "validation" in ds:
-        train_raw, val_raw = ds["train"], ds["validation"]
+    if max_train:
+        # Stream a tiny slice instead of downloading the whole corpus.
+        n_val = max_val or max(1, max_train // 4)
+        stream = load_dataset(dataset_name, split="train", streaming=True)
+        rows = [r for _, r in zip(range(max_train + n_val), stream)]
+        train_raw = Dataset.from_list(rows[:max_train])
+        val_raw = Dataset.from_list(rows[max_train:max_train + n_val])
     else:
-        split = ds["train"].train_test_split(test_size=val_size, seed=seed)
-        train_raw, val_raw = split["train"], split["test"]
+        ds = load_dataset(dataset_name)
+        if "validation" in ds:
+            train_raw, val_raw = ds["train"], ds["validation"]
+        else:
+            split = ds["train"].train_test_split(test_size=val_size, seed=seed)
+            train_raw, val_raw = split["train"], split["test"]
 
     def _render(example):
         msgs = example.get("messages") or example.get("conversations")
-        input_ids, labels = [], []
+        # Render incrementally: tokenize the conversation prefix after each turn and
+        # take the newly added tokens as that turn's segment. This keeps any template
+        # preamble (e.g. a system header on the first turn) attached correctly and
+        # lets us supervise only the assistant turns.
+        input_ids, labels, prev_len, convo = [], [], 0, []
         for msg in msgs:
             role = msg.get("role") or msg.get("from")
             content = msg.get("content") or msg.get("value")
-            seg = tok.apply_chat_template(
-                [{"role": role, "content": content}], tokenize=True, add_generation_prompt=False
-            )
+            convo.append({"role": role, "content": content})
+            # render to text, then tokenize -> plain list[int] (avoids tokenizers.Encoding)
+            text = tok.apply_chat_template(convo, tokenize=False, add_generation_prompt=False)
+            ids = tok(text, add_special_tokens=False)["input_ids"]
+            seg = ids[prev_len:]
+            prev_len = len(ids)
             input_ids.extend(seg)
-            # supervise assistant turns only
-            mask_val = seg if role in ("assistant", "gpt") else [-100] * len(seg)
-            labels.extend(mask_val)
+            labels.extend(seg if role in ("assistant", "gpt") else [-100] * len(seg))
         input_ids = input_ids[:max_seq_len]
         labels = labels[:max_seq_len]
         attn = [1] * len(input_ids)

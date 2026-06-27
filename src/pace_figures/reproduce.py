@@ -63,7 +63,7 @@ def main(cfg: DictConfig):
 
     curves = list(fig.get("curves", []) or [])
     if not curves:
-        print(f"No run specs for '{fig.id}' yet — see REPRODUCE.md for the catalog.")
+        print(f"No run specs for '{fig.id}' yet — see the README or `pace-figure fig=list`.")
         return
 
     extra = []
