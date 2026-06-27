@@ -1,5 +1,10 @@
-"""Parity test: the repo's PACE optimizer must be numerically identical to the
-original research implementation (set PACE_REF_OPTIMIZER to point at it).
+"""PURPOSE: prove the PACE optimizer is correct — it reduces to plain AdamW when
+c=0, its EMA eval-swap never disturbs the training weights, the core class imports
+with torch alone, and (when a reference is available) it is bit-for-bit identical to
+the original research optimizer. This is the test that guards the algorithm itself.
+
+Set PACE_REF_OPTIMIZER to point at the original research implementation to enable the
+bit-identical comparison (skipped gracefully off-cluster).
 
 Runs three configurations on a tiny synthetic regression problem and asserts the
 parameter trajectories match bit-for-bit:

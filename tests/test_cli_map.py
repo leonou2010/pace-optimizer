@@ -1,5 +1,7 @@
-"""The reproduction map must be self-consistent: every figure config is in the
-catalog, and each curve expands to a well-formed pace-train command.
+"""PURPOSE: make sure the figure-reproduction map actually works — every figure
+config is listed in the catalog (FIGMAP.yaml) and every curve it declares expands
+into a well-formed `pace-train` command. This guards the `pace-figure` CLI so a user
+can trust the printed reproduction commands. Offline, no GPU.
 """
 
 import sys

@@ -1,8 +1,10 @@
-"""Checks on the bundled PACE result fixtures (one small + one big model).
+"""PURPOSE: validate the two bundled PACE result fixtures (one small, one big model)
+so anyone who clones the repo can check the result schema and the actual paper numbers
+offline — no GPU, no download. Confirms each fixture parses, is genuinely a PACE run
+(pullback active), and its recorded train + val losses match and improve over training.
 
-These are real PACE finetuning runs (`tests/fixtures/results/`) shipped so anyone
-who clones the repo can exercise the result schema / numbers offline, without a
-GPU or any download. They are the actual runs behind Fig 1's PACE points.
+These are the real PACE finetuning runs behind Fig 1's PACE points
+(`tests/fixtures/results/`).
 """
 
 import json

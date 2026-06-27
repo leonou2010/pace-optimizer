@@ -1,8 +1,11 @@
-"""Self-contained training smoke test.
+"""PURPOSE: the end-to-end "does the whole thing actually work" test. After a fresh
+`git clone` it downloads a model + smol-smoltalk from HuggingFace, builds the data with
+the real recipe, trains PACE for a few steps, and checks the run produced sane results —
+including final train/val loss within a tolerance of a committed reference. No bundled
+data, no cluster paths (needs network; uses a GPU if present, else CPU).
 
 Downloads a model + smol-smoltalk from HuggingFace, runs PACE, and checks the
-result. No bundled data, no cluster paths — it works after `git clone` (needs
-network; uses a GPU if present, else CPU).
+result.
 
 How long it runs is up to you, via environment variables (all have defaults):
 
