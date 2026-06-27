@@ -6,10 +6,8 @@
 toward an exponential moving average (EMA) of recent weights — per-coordinate, with
 a clipped strength.
 
-A lot of LM pipelines return that EMA instead of the final weights. PACE trains in a
-way that makes the returned average better. In the paper it beats AdamW and
-EMA-evaluated AdamW on 1–2B fine-tuning and on GPT-2 / FineWeb pretraining, across a
-range of learning rates and schedules.
+In the paper it beats AdamW and EMA-evaluated AdamW on 1–2B fine-tuning and on
+GPT-2 / FineWeb pretraining, across a range of learning rates and schedules.
 
 ```
 theta_{t+1} = (theta_t - AdamW_step) + lambda_{t,i} * (ema_{t-1} - theta_t)
