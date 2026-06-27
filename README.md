@@ -1,5 +1,7 @@
 # PACE
 
+📄 Paper: **[Training for the Model You Return: Improving Optimization for Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086)** (Au & Block, 2026 · arXiv:2606.25086)
+
 **PACE** is a drop-in AdamW variant for language-model training. It adds a small,
 per-coordinate *pullback* toward an exponential moving average (EMA) of the
 iterates; the pullback gain is scaled by the learning rate and inversely by the
@@ -98,12 +100,20 @@ training.
 
 ## Citation
 
+Paper: [Training for the Model You Return: Improving Optimization for
+Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086) (arXiv:2606.25086).
+
 ```bibtex
-@article{pace2026,
-  title  = {Training for the Model You Return: Improving Optimization for
-            Iterate-Averaged Language Models},
-  author = {Au, Kwok Chun and Block, Adam},
-  year   = {2026}
+@article{au2026pace,
+  title         = {Training for the Model You Return: Improving Optimization for
+                   Iterate-Averaged Language Models},
+  author        = {Au, Kwok Chun and Block, Adam},
+  journal       = {arXiv preprint arXiv:2606.25086},
+  year          = {2026},
+  eprint        = {2606.25086},
+  archivePrefix = {arXiv},
+  primaryClass  = {cs.LG},
+  url           = {https://arxiv.org/abs/2606.25086}
 }
 ```
 
