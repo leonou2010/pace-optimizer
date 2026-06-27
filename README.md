@@ -26,9 +26,9 @@ pip install pace-optimizer          # or: uv add pace-optimizer
 from pace import PACE
 
 opt = PACE(model.parameters(), lr=1e-3,
-           lambda_pullback=0.15,    # c — pullback strength (0 ⇒ plain AdamW)
+           lambda_pullback=0.15,    # c — pullback strength
            ema_kappa=0.2,           # kappa — EMA decay exponent
-           use_ema_eval=True)       # evaluate with the EMA weights
+           use_ema_eval=True)       # evaluate (and return) the EMA weights
 
 for batch in loader:
     loss = model(batch).loss
@@ -109,15 +109,6 @@ uv run pytest -q                   # fast: optimizer parity + config map + stand
 
 Anything runnable as a console command also runs as a module:
 `python -m pace.train …` and `python -m pace_figures.reproduce fig=…`.
-
-## Relation to prior work
-
-PACE's iterate-averaging component builds on the line of work on EMA / averaged
-optimizers for language models, in particular **BEMA** (Block & Zhang, 2025 —
-[paper](https://arxiv.org/abs/2508.00180), [code](https://github.com/abblock/bema))
-and the broader literature on iterate averaging (Polyak–Ruppert). PACE differs in
-that the averaging is coupled to the optimizer step through a learning-rate-scaled,
-per-coordinate pullback.
 
 ## Citation
 
