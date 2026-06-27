@@ -1,20 +1,20 @@
-"""PURPOSE: prove the PACE optimizer is correct — it reduces to plain AdamW when
-c=0, its EMA eval-swap never disturbs the training weights, the core class imports
-with torch alone, and (when a reference is available) it is bit-for-bit identical to
-the original research optimizer. This is the test that guards the algorithm itself.
+"""Numerical correctness tests for the PACE optimizer.
 
-Set PACE_REF_OPTIMIZER to point at the original research implementation to enable the
-bit-identical comparison (skipped gracefully off-cluster).
+Each test trains a small 8->16->1 MLP on a fixed synthetic regression task for 50
+optimizer steps and verifies the result:
 
-Runs three configurations on a tiny synthetic regression problem and asserts the
-parameter trajectories match bit-for-bit:
-  - c=0, no EMA eval  -> plain AdamW
-  - c=0, EMA eval      -> EMA baseline (training params follow AdamW)
-  - c>0                -> full PACE
+- test_pace_c0_equals_torch_adamw: with lambda_pullback=0 and use_ema_eval=False,
+  PACE reproduces torch.optim.AdamW (final parameters agree to within 1e-6).
+- test_eval_swap_does_not_affect_training: with use_ema_eval=True, wrapping a
+  validation pass in eval()/train() does not alter the training weights; the loss
+  trajectory and final parameters match a run without the swap (within 1e-12).
+- test_parity_with_research_impl: for the AdamW, EMA, and PACE configurations, PACE
+  matches the original research optimizer to within 1e-9. Requires the
+  PACE_REF_OPTIMIZER environment variable; skipped when it is unset.
+- test_optimizer_imports_with_torch_only: pace.optimizer imports and exposes PACE
+  using only torch, without the training or figure dependencies.
 
-This is a CPU-only test; it does not require a GPU or any bundled data. The old
-implementation is imported directly from the research tree when present, so the
-test is skipped gracefully off-cluster.
+CPU-only; requires no GPU and no bundled data.
 """
 
 import copy

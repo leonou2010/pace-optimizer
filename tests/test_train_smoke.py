@@ -1,27 +1,31 @@
-"""PURPOSE: the end-to-end "does the whole thing actually work" test. After a fresh
-`git clone` it downloads a model + smol-smoltalk from HuggingFace, builds the data with
-the real recipe, trains PACE for a few steps, and checks the run produced sane results —
-including final train/val loss within a tolerance of a committed reference. No bundled
-data, no cluster paths (needs network; uses a GPU if present, else CPU).
+"""End-to-end training test for a freshly cloned repository.
 
-Downloads a model + smol-smoltalk from HuggingFace, runs PACE, and checks the
-result.
+Downloads a model and the smol-smoltalk dataset from HuggingFace, builds the training
+data with the standard recipe, and runs PACE through the real `pace.train` entry point.
+It then verifies that:
 
-How long it runs is up to you, via environment variables (all have defaults):
+- the training process completes successfully and writes a result JSON with the
+  {config, summary, eval_logs} structure;
+- the run is a PACE run (lambda_pullback > 0), the EMA evaluation is populated, and the
+  optimizer's lambda statistics are recorded;
+- the final train and validation losses are finite and agree with a committed reference
+  (tests/fixtures/smoke_reference.json) within PACE_SMOKE_TOL.
 
-    PACE_TEST_STEPS=20            # number of optimizer steps to train ("how long")
+No bundled data or cluster paths; requires network access and uses a GPU when available.
+
+The run is configured through environment variables, all with defaults:
+
+    PACE_TEST_STEPS=20           # number of optimizer steps to train
     PACE_TEST_TRAIN=512          # training examples ('all' = the full dataset)
-    PACE_TEST_VAL=128            # validation examples ('all' = full); eval is over all of them
+    PACE_TEST_VAL=128            # validation examples ('all' = the full set)
     PACE_TEST_BIG=1              # also run SmolLM2-1.7B (default: SmolLM2-135M only)
-    PACE_SMOKE_TOL=0.30          # tolerance for the final-loss check vs the committed reference
+    PACE_SMOKE_TOL=0.30          # tolerance for the final-loss check vs the reference
 
-The prepared dataset is cached under ~/.cache/pace_test/, so after the first run
-only the training (the part you scale with PACE_TEST_STEPS) repeats. The result is
-a complete JSON ({config, summary, eval_logs, step_logs}) with final_val_loss
-computed over the full prepared validation set.
+The prepared dataset is cached under ~/.cache/pace_test/, so subsequent runs repeat only
+the training. The validation loss is computed over the full prepared validation set.
 
     uv run pytest tests/test_train_smoke.py
-    PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py    # longer
+    PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py    # train longer
     PACE_TEST_TRAIN=all PACE_TEST_STEPS=1778 uv run pytest ...     # full-scale run
 """
 

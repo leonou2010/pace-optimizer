@@ -132,10 +132,10 @@ def prepare_sft(
     ``dataset_name='HuggingFaceTB/smol-smoltalk'``) and a SmolLM2 tokenizer this
     yields the same 113832-train / 11986-val tokenized split used for the figures.
 
-    ``subset_ratio`` takes a fixed ``random.sample`` fraction of the dataset's
-    native ``train`` / ``test`` splits (seeded). ``max_train`` / ``max_val`` instead
-    stream a tiny deterministic first-N slice (no full download) for a quick,
-    self-contained smoke test; the per-conversation tokenization is identical.
+    ``subset_ratio`` takes a fixed, seeded ``random.sample`` fraction of the dataset's
+    native ``train`` / ``test`` splits. ``max_train`` / ``max_val`` instead stream a
+    deterministic first-N slice (avoiding a full download) for a self-contained test;
+    the per-conversation tokenization is identical in both cases.
     """
     from datasets import Dataset, load_dataset
     from transformers import AutoTokenizer
@@ -145,8 +145,8 @@ def prepare_sft(
         tok.pad_token = tok.eos_token
 
     if max_train:
-        # Smoke path: stream the first-N rows of each native split (deterministic,
-        # no full download). Tokenization is identical to the full path.
+        # Streamed slice: take the first-N rows of each native split (deterministic,
+        # avoids a full download). Tokenization is identical to the full path.
         n_val = max_val or max(1, max_train // 4)
         train_stream = load_dataset(dataset_name, split="train", streaming=True)
         train_rows = [r for _, r in zip(range(max_train), train_stream)]

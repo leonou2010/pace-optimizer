@@ -1,7 +1,16 @@
-"""PURPOSE: make sure the figure-reproduction map actually works — every figure
-config is listed in the catalog (FIGMAP.yaml) and every curve it declares expands
-into a well-formed `pace-train` command. This guards the `pace-figure` CLI so a user
-can trust the printed reproduction commands. Offline, no GPU.
+"""Consistency tests for the figure-reproduction map.
+
+Verifies that `pace-figure` produces valid, complete reproduction commands:
+
+- test_every_fig_config_is_in_the_catalog: every config under conf/fig/ is listed in
+  FIGMAP.yaml.
+- test_every_figure_expands_to_wellformed_commands: each figure's curves (and any
+  sweeps) expand to commands that begin with `pace-train` and include the required
+  overrides (model, optimizer, schedule, seed, optimizer.lr).
+- test_fig1_has_nine_curves: fig1 declares the expected nine curves (three models x
+  three methods).
+
+Offline; requires no GPU, network, or bundled data.
 """
 
 import sys

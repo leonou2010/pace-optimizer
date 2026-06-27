@@ -1,10 +1,17 @@
-"""PURPOSE: validate the two bundled PACE result fixtures (one small, one big model)
-so anyone who clones the repo can check the result schema and the actual paper numbers
-offline — no GPU, no download. Confirms each fixture parses, is genuinely a PACE run
-(pullback active), and its recorded train + val losses match and improve over training.
+"""Validation of the bundled PACE result fixtures.
 
-These are the real PACE finetuning runs behind Fig 1's PACE points
-(`tests/fixtures/results/`).
+The repository ships two real PACE fine-tuning runs (SmolLM2-135M and SmolLM2-1.7B)
+under tests/fixtures/results/ so the result format and the reported figures can be
+checked offline. These tests verify, for each fixture:
+
+- the JSON has the expected {config, summary, eval_logs} structure;
+- it is a PACE run (config.optimizer.lambda_pullback > 0);
+- summary.final_val_loss matches the recorded value (within 1e-3) and
+  summary.final_train_loss is present and positive;
+- the train and validation loss trajectories in eval_logs both decrease from start
+  to finish, and all recorded train losses are finite.
+
+test_both_models_present confirms both fixture files exist. Offline; no GPU or network.
 """
 
 import json

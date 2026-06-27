@@ -2,12 +2,13 @@
 
 📄 Paper: **[Training for the Model You Return: Improving Optimization for Iterate-Averaged Language Models](https://arxiv.org/abs/2606.25086)** (Au & Block, 2026 · arXiv:2606.25086)
 
-**PACE** is a drop-in optimizer (a `torch.optim.Optimizer`) — AdamW plus a small,
-per-coordinate pullback that nudges the weights toward an exponential moving average
-(EMA) of recent weights, with a clipped strength.
+**PACE** is a drop-in optimizer (a `torch.optim.Optimizer`): AdamW plus a small,
+per-coordinate pullback toward an exponential moving average (EMA) of recent weights,
+with a clipped strength.
 
-In the paper it beats AdamW and EMA-evaluated AdamW on 1–2B fine-tuning and on
-GPT-2 / FineWeb pretraining, across a range of learning rates and schedules.
+In the paper it improves on AdamW and EMA-evaluated AdamW for 1–2B-parameter
+fine-tuning and for GPT-2 / FineWeb pretraining, across a range of learning rates and
+schedules.
 
 Each optimizer step `t` (per coordinate `i`), as implemented:
 
@@ -24,13 +25,13 @@ theta_{t+1} = theta' + lambda_{t,i} * (ema_{t-1} - theta_t)
 ema_t       = (1 - beta_t) * ema_{t-1} + beta_t * theta_{t+1},   beta_t = decay_t
 ```
 
-With `use_ema_eval=True` the model you evaluate/return is the EMA (`ema_t`). Note the
-pullback (step 2) is applied on every step; only the EMA update (step 3) honors
+With `use_ema_eval=True` the weights evaluated and returned are the EMA (`ema_t`). The
+pullback (step 2) is applied on every step; only the EMA update (step 3) honours
 `ema_update_freq`.
 
 ## Use the optimizer
 
-The optimizer is the whole product and depends only on PyTorch:
+The optimizer is the core of the package and depends only on PyTorch:
 
 ```bash
 pip install pace-optimizer          # or: uv add pace-optimizer
@@ -54,10 +55,10 @@ validate(model)
 opt.train()   # swap back to the training weights
 ```
 
-Two knobs recover the baselines:
-- `use_ema_eval` chooses what you **return/evaluate** — the EMA weights (`True`) or the
-  final iterate (`False`).
-- `lambda_pullback` (c) chooses whether **training** pulls toward the EMA (`c>0`) or not (`c=0`).
+Two arguments recover the baselines:
+- `use_ema_eval` selects what is **returned and evaluated** — the EMA weights (`True`)
+  or the final iterate (`False`).
+- `lambda_pullback` (c) selects whether **training** applies the pullback (`c>0`) or not (`c=0`).
 
 So: `c=0, use_ema_eval=True` → the **EMA baseline** (AdamW training, EMA returned);
 `c=0, use_ema_eval=False` → **plain AdamW** (matches `torch.optim.AdamW` up to
@@ -93,7 +94,7 @@ gate; the code applies it every step — identical for `uf=1`, which all paper r
 
 ## Reproduce the paper
 
-The repo ships **no result data and no plots** — only the optimizer, the training
+The repository ships **no result data and no plots** — only the optimizer, the training
 pipeline, and a **static map** from each paper figure to the exact training configs.
 Reproducing a figure means training its runs and reading the result JSONs.
 
@@ -140,10 +141,11 @@ pace-train model=smollm2_1.7b optimizer=pace schedule=const \
 A run writes `{config, summary, eval_logs, step_logs}` as JSON under `runs/`;
 `summary.final_val_loss` is the plotted metric (`final_train_loss` is recorded too).
 The metric convention follows the paper: `val_loss`/`ema_val_loss` are the **returned
-(EMA)** weights, `vanilla_val_loss` is the final iterate. W&B logging is off by default,
-and the optimizer's per-step telemetry (gradient/pullback norms, clip fraction) is gated
-behind `optimizer.log_stats` — leave it off for the fastest path. Training runs a
-single pass and does not checkpoint/resume; size `training.max_steps` accordingly.
+(EMA)** weights and `vanilla_val_loss` is the final iterate. W&B logging is disabled by
+default, and the optimizer's per-step telemetry (gradient/pullback norms, clip fraction)
+is gated behind `optimizer.log_stats`; it is disabled by default to avoid a per-step GPU
+synchronization. Training performs a single pass and does not checkpoint or resume, so
+set `training.max_steps` accordingly.
 
 ### Data recipe (exact, reproducible)
 
@@ -164,18 +166,21 @@ instead stream a small deterministic first-N slice for a quick self-contained te
 uv run pytest -q                   # fast: optimizer parity + config map + result fixtures
 ```
 
-- `tests/test_optimizer_parity.py` — `c=0 == torch.AdamW` (up to fp ordering), the EMA
-  eval-swap never perturbs training, and the core optimizer imports with torch only (plus
-  bit-identical parity vs a reference if `PACE_REF_OPTIMIZER` is set). Runs anywhere.
-- `tests/test_cli_map.py` — the figure→config reproduction map is complete and every
+- `tests/test_optimizer_parity.py` — optimizer correctness: PACE with `c=0` reproduces
+  `torch.optim.AdamW`, the EMA evaluation swap leaves training unchanged, the core
+  imports with torch only, and (when `PACE_REF_OPTIMIZER` is set) PACE is bit-identical
+  to the reference implementation. Runs anywhere; no GPU.
+- `tests/test_cli_map.py` — the figure-to-config reproduction map is complete and every
   curve expands to a well-formed `pace-train` command.
-- `tests/test_result_fixtures.py` — checks the two bundled PACE result fixtures
-  (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B run) parse, are
-  genuinely PACE runs, and match their recorded **train and val** loss. Offline, no GPU.
-- `tests/test_train_smoke.py` — **self-contained training test**: downloads a model +
-  smol-smoltalk from HuggingFace and runs PACE end-to-end (no bundled data), then checks
-  the final train/val loss against a committed reference within `PACE_SMOKE_TOL` (loose by
-  default, since same-seed runs drift across hardware). Length is env-configurable:
+- `tests/test_result_fixtures.py` — validates the two bundled PACE result fixtures
+  (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B run): correct
+  structure, genuine PACE runs, and recorded train and validation losses that match and
+  decrease. Offline; no GPU.
+- `tests/test_train_smoke.py` — end-to-end training test: downloads a model and
+  smol-smoltalk from HuggingFace and runs PACE through `pace.train`, then checks the
+  final train and validation losses against a committed reference within `PACE_SMOKE_TOL`
+  (the default tolerance is generous, as same-seed runs differ across hardware). The run
+  length is configurable through environment variables:
   ```bash
   uv run pytest tests/test_train_smoke.py                       # SmolLM2-135M, 20 steps
   PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py   # train longer
