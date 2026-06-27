@@ -81,10 +81,12 @@ def _run(OptCls, opt_kwargs, n_steps=50, seed=0):
     return losses, final
 
 
+# ema_rho is set explicitly so the comparison is independent of each implementation's
+# default (PACE defaults to 0 = the paper schedule; the reference defaults to 10).
 CONFIGS = {
     "adamw":  dict(lr=1e-3, lambda_pullback=0.0, use_ema_eval=False),
-    "ema":    dict(lr=1e-3, lambda_pullback=0.0, use_ema_eval=True, ema_kappa=0.5),
-    "pace":   dict(lr=1e-3, lambda_pullback=0.2, use_ema_eval=True, ema_kappa=0.5),
+    "ema":    dict(lr=1e-3, lambda_pullback=0.0, use_ema_eval=True, ema_kappa=0.5, ema_rho=0.0),
+    "pace":   dict(lr=1e-3, lambda_pullback=0.2, use_ema_eval=True, ema_kappa=0.5, ema_rho=0.0),
 }
 
 
@@ -140,6 +142,13 @@ def test_pace_c0_equals_torch_adamw():
     )
     max_param_diff = (new_final - aw_final).abs().max().item()
     assert max_param_diff < 1e-6, f"PACE(c=0) vs torch.AdamW param diff {max_param_diff}"
+
+
+def test_optimizer_imports_with_torch_only():
+    """The core product must import without the training/figure extras — only torch."""
+    import importlib
+    mod = importlib.import_module("pace.optimizer")
+    assert hasattr(mod, "PACE")
 
 
 if __name__ == "__main__":

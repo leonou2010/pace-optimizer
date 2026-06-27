@@ -2,14 +2,23 @@
 
 Training consumes a tokenized dataset saved with HuggingFace ``datasets``
 (``save_to_disk``) under ``<path>/train`` and ``<path>/val``, where each example
-has ``input_ids``, ``attention_mask``, and ``labels`` (with prompt tokens masked
-to ``-100``), padded to a fixed ``max_seq_len``.
+has ``input_ids``, ``attention_mask``, and ``labels`` (with non-assistant tokens
+masked to ``-100``), padded to a fixed ``max_seq_len``.
 
 ``prepare_sft`` builds such a dataset from a HuggingFace chat dataset (e.g.
 ``HuggingFaceTB/smol-smoltalk``). ``load_prepared`` loads an existing one.
+
+The tokenization here is byte-for-byte the recipe used for the paper's SFT runs:
+each turn is rendered as hand-rolled ChatML ``<|im_start|>{role}\n{content}<|im_end|>\n``
+with the header and body tokenized separately and ``add_special_tokens=False`` (so no
+BOS is prepended and no system turn is injected); labels are ``-100`` everywhere
+except the assistant turn's body (the assistant *header* is masked too). The paper
+SmolLM2/smol-smoltalk data uses ``max_seq_len=1280``, ``subset_ratio=0.5``,
+``seed=42``, and the dataset's native ``train`` / ``test`` splits.
 """
 
 import os
+import random
 from typing import Optional, Tuple
 
 import torch
@@ -33,24 +42,100 @@ def load_prepared(path: str, max_samples: Optional[int] = None) -> Tuple:
     return train_ds, val_ds
 
 
+def _set_seed(seed: int):
+    random.seed(seed)
+    try:
+        import numpy as np
+        np.random.seed(seed)
+    except Exception:
+        pass
+    torch.manual_seed(seed)
+
+
+def tokenize_conversation(messages, tokenizer, max_seq_len):
+    """Tokenize a conversation with response-only masking (hand-rolled ChatML).
+
+    Each turn renders to ``<|im_start|>{role}\\n`` (header) + ``{content}<|im_end|>\\n``
+    (body), tokenized separately with ``add_special_tokens=False``. The header is
+    always masked; the body is supervised only for assistant turns.
+    """
+    input_ids, labels = [], []
+    for msg in messages:
+        role = msg.get("role") or msg.get("from")
+        content = msg.get("content") or msg.get("value")
+        # ShareGPT-style role names map onto the ChatML roles.
+        is_assistant = role in ("assistant", "gpt")
+
+        header_ids = tokenizer.encode(f"<|im_start|>{role}\n", add_special_tokens=False)
+        body_ids = tokenizer.encode(f"{content}<|im_end|>\n", add_special_tokens=False)
+
+        input_ids.extend(header_ids)
+        labels.extend([-100] * len(header_ids))
+
+        input_ids.extend(body_ids)
+        labels.extend(body_ids if is_assistant else [-100] * len(body_ids))
+
+    input_ids = input_ids[:max_seq_len]
+    labels = labels[:max_seq_len]
+    attention_mask = [1] * len(input_ids)
+    return input_ids, attention_mask, labels
+
+
+def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
+    """Tokenize, filter, and pad a list of conversation rows into a Dataset."""
+    from datasets import Dataset
+
+    out_ids, out_attn, out_labels, skipped = [], [], [], 0
+    for ex in rows:
+        messages = ex.get("messages") or ex.get("conversations")
+        # Skip rows with no assistant content to supervise (matches the paper recipe).
+        if not messages or not any(
+            (m.get("role") or m.get("from")) in ("assistant", "gpt") for m in messages
+        ):
+            skipped += 1
+            continue
+        ids, attn, labels = tokenize_conversation(messages, tokenizer, max_seq_len)
+        if len(ids) < 10 or all(l == -100 for l in labels):
+            skipped += 1
+            continue
+        out_ids.append(ids)
+        out_attn.append(attn)
+        out_labels.append(labels)
+
+    # Pad to a fixed length for efficient batching.
+    for i in range(len(out_ids)):
+        pad = max_seq_len - len(out_ids[i])
+        out_ids[i] = out_ids[i] + [pad_id] * pad
+        out_attn[i] = out_attn[i] + [0] * pad
+        out_labels[i] = out_labels[i] + [-100] * pad
+
+    print(f"  {name}: kept {len(out_ids)}, skipped {skipped}")
+    return Dataset.from_dict(
+        {"input_ids": out_ids, "attention_mask": out_attn, "labels": out_labels}
+    )
+
+
 def prepare_sft(
     out_dir: str,
     tokenizer_name: str,
     dataset_name: str = "HuggingFaceTB/smol-smoltalk",
     max_seq_len: int = 1280,
-    val_size: int = 6000,
+    subset_ratio: float = 0.5,
     seed: int = 42,
     max_train: int | None = None,
     max_val: int | None = None,
 ) -> str:
-    """Build a tokenized, prompt-masked SFT dataset and save it to ``out_dir``.
+    """Build a tokenized, response-masked SFT dataset and save it to ``out_dir``.
 
-    Each conversation is rendered with the tokenizer's chat template; tokens that
-    belong to the user turns are masked to ``-100`` so the loss is computed only
-    on the assistant responses. Sequences are padded/truncated to ``max_seq_len``.
+    Reproduces the paper's SFT data exactly (see module docstring). With the
+    defaults (``max_seq_len=1280``, ``subset_ratio=0.5``, ``seed=42``,
+    ``dataset_name='HuggingFaceTB/smol-smoltalk'``) and a SmolLM2 tokenizer this
+    yields the same 113832-train / 11986-val tokenized split used for the figures.
 
-    ``max_train`` / ``max_val`` cap the number of examples (streamed, so only a
-    small slice is downloaded) — handy for a quick self-contained smoke test.
+    ``subset_ratio`` takes a fixed ``random.sample`` fraction of the dataset's
+    native ``train`` / ``test`` splits (seeded). ``max_train`` / ``max_val`` instead
+    stream a tiny deterministic first-N slice (no full download) for a quick,
+    self-contained smoke test; the per-conversation tokenization is identical.
     """
     from datasets import Dataset, load_dataset
     from transformers import AutoTokenizer
@@ -58,34 +143,46 @@ def prepare_sft(
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
-    if tok.chat_template is None:
-        # Base-model tokenizers often have no chat template; use a ChatML default
-        # so SFT conversations can be rendered.
-        tok.chat_template = (
-            "{% for message in messages %}"
-            "{% if loop.first and messages[0]['role'] != 'system' %}"
-            "{{ '<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n' }}{% endif %}"
-            "{{ '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' }}"
-            "{% endfor %}"
-            "{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}"
-        )
 
     if max_train:
-        # Stream a tiny slice instead of downloading the whole corpus.
+        # Smoke path: stream the first-N rows of each native split (deterministic,
+        # no full download). Tokenization is identical to the full path.
         n_val = max_val or max(1, max_train // 4)
-        stream = load_dataset(dataset_name, split="train", streaming=True)
-        rows = [r for _, r in zip(range(max_train + n_val), stream)]
-        train_raw = Dataset.from_list(rows[:max_train])
-        val_raw = Dataset.from_list(rows[max_train:max_train + n_val])
+        train_stream = load_dataset(dataset_name, split="train", streaming=True)
+        train_rows = [r for _, r in zip(range(max_train), train_stream)]
+        try:
+            val_stream = load_dataset(dataset_name, split="test", streaming=True)
+        except Exception:
+            val_stream = load_dataset(dataset_name, split="train", streaming=True)
+        val_rows = [r for _, r in zip(range(n_val), val_stream)]
     else:
         ds = load_dataset(dataset_name)
-        if "validation" in ds:
-            train_raw, val_raw = ds["train"], ds["validation"]
+        train_split = ds["train"]
+        if "test" in ds:
+            val_split = ds["test"]
+        elif "validation" in ds:
+            val_split = ds["validation"]
         else:
-            split = ds["train"].train_test_split(test_size=val_size, seed=seed)
-            train_raw, val_raw = split["train"], split["test"]
+            val_split = None
+        # Fixed seeded subsets of the native splits (exact paper recipe: sample
+        # train first, then val, after seeding the `random` module).
+        _set_seed(seed)
+        n_train = int(len(train_split) * subset_ratio)
+        train_idx = sorted(random.sample(range(len(train_split)), n_train))
+        if val_split is not None:
+            n_val = int(len(val_split) * subset_ratio)
+            val_idx = sorted(random.sample(range(len(val_split)), n_val))
+            train_rows = train_split.select(train_idx)
+            val_rows = val_split.select(val_idx)
+        else:
+            # No native eval split: hold out a fraction of train.
+            n_val = max(1, int(len(train_split) * subset_ratio * 0.05))
+            remaining = sorted(set(range(len(train_split))) - set(train_idx))
+            val_idx = sorted(random.sample(remaining, min(n_val, len(remaining))))
+            train_rows = train_split.select(train_idx)
+            val_rows = train_split.select(val_idx)
 
-    sample = train_raw[0] if len(train_raw) else {}
+    sample = train_rows[0] if len(train_rows) else {}
     if not (sample.get("messages") or sample.get("conversations")):
         raise ValueError(
             "prepare_sft expects a chat/SFT dataset with a 'messages' or "
@@ -93,40 +190,9 @@ def prepare_sft(
             "are not supported by the shipped SFT trainer."
         )
 
-    def _render(example):
-        msgs = example.get("messages") or example.get("conversations")
-        if not msgs:  # defensively skip a malformed row (emit an all-masked example)
-            return {"input_ids": [tok.pad_token_id] * max_seq_len,
-                    "attention_mask": [0] * max_seq_len, "labels": [-100] * max_seq_len}
-        # Render incrementally: tokenize the conversation prefix after each turn and
-        # take the newly added tokens as that turn's segment. This keeps any template
-        # preamble (e.g. a system header on the first turn) attached correctly and
-        # lets us supervise only the assistant turns.
-        input_ids, labels, prev_len, convo = [], [], 0, []
-        for msg in msgs:
-            role = msg.get("role") or msg.get("from")
-            content = msg.get("content") or msg.get("value")
-            convo.append({"role": role, "content": content})
-            # render to text, then tokenize -> plain list[int] (avoids tokenizers.Encoding)
-            text = tok.apply_chat_template(convo, tokenize=False, add_generation_prompt=False)
-            ids = tok(text, add_special_tokens=False)["input_ids"]
-            seg = ids[prev_len:]
-            prev_len = len(ids)
-            input_ids.extend(seg)
-            labels.extend(seg if role in ("assistant", "gpt") else [-100] * len(seg))
-        input_ids = input_ids[:max_seq_len]
-        labels = labels[:max_seq_len]
-        attn = [1] * len(input_ids)
-        pad = max_seq_len - len(input_ids)
-        if pad > 0:
-            input_ids += [tok.pad_token_id] * pad
-            labels += [-100] * pad
-            attn += [0] * pad
-        return {"input_ids": input_ids, "attention_mask": attn, "labels": labels}
-
-    cols = train_raw.column_names
-    train_tok = train_raw.map(_render, remove_columns=cols, desc="tokenizing train")
-    val_tok = val_raw.map(_render, remove_columns=cols, desc="tokenizing val")
-    train_tok.save_to_disk(os.path.join(out_dir, "train"))
-    val_tok.save_to_disk(os.path.join(out_dir, "val"))
+    pad_id = tok.pad_token_id
+    train_ds = _build_split(train_rows, tok, max_seq_len, pad_id, "train")
+    val_ds = _build_split(val_rows, tok, max_seq_len, pad_id, "val")
+    train_ds.save_to_disk(os.path.join(out_dir, "train"))
+    val_ds.save_to_disk(os.path.join(out_dir, "val"))
     return out_dir

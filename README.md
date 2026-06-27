@@ -64,6 +64,33 @@ So: `c=0, use_ema_eval=True` → the **EMA baseline** (AdamW training, EMA retur
 floating-point ordering, ~1e-6 in the parity test); `c>0` → **PACE**. PACE generalizes
 both baselines.
 
+### All parameters
+
+`PACE(params, ...)` — constructor arguments (paper symbol in parentheses):
+
+| argument | symbol | default | meaning |
+|----------|--------|---------|---------|
+| `params` | – | – | iterable of parameters or param groups (standard `torch.optim` API) |
+| `lr` | η | `1e-4` | AdamW learning rate |
+| `betas` | β₁,β₂ | `(0.9, 0.999)` | AdamW moment decay rates |
+| `eps` | ε | `1e-8` | AdamW denominator epsilon (also the floor in the pullback gain) |
+| `weight_decay` | – | `0.01` | decoupled (AdamW) weight decay |
+| `lambda_pullback` | c | `0.0` | pullback strength. `0` = no pullback (AdamW/EMA baseline); `>0` = PACE |
+| `clamp_pullback` | – | `True` | clamp each per-coordinate gain to `≤ 1` (interpolate toward the EMA, never past it) |
+| `beta_ema` | – | `0.01` | fixed EMA decay, used **only** when `ema_kappa is None` |
+| `use_ema_eval` | – | `False` | if `True`, `eval()` returns the EMA weights and `train()` restores the iterate |
+| `ema_kappa` | κ | `None` | exponent of the decaying EMA schedule `(1+γ·max(0,t−ρ))^(−κ)`. `None` ⇒ use the fixed `beta_ema` |
+| `ema_rho` | ρ | `0.0` | steps to hold before the schedule decays. `0` = the paper's `(1+γ·t)^(−κ)` |
+| `ema_gamma` | γ | `1.0` | schedule rate |
+| `ema_update_freq` | uf | `1` | update the EMA every `uf` steps (the pullback itself is applied every step) |
+| `log_stats` | – | `False` | compute per-step telemetry (λ stats, clip fraction, update norms) via `get_step_stats()`; off by default because each stat is a `.item()` GPU sync. The optimizer math is identical either way |
+
+Per step `t`, per coordinate `i`: `λ = clamp(η·c·decay/(√v̂ᵢ+ε), max=1)` with
+`decay = max((1+γ·max(0,t−ρ))^(−κ), 1e-4)`; the weights move
+`θ ← (θ − AdamW_step) + λ·(ema_{t−1} − θ_t)`, then the EMA updates every `uf` steps with
+`β = decay`. (The paper's Algorithm 1 box places the pullback inside the `t mod uf`
+gate; the code applies it every step — identical for `uf=1`, which all paper runs use.)
+
 ## Reproduce the paper
 
 The repo ships **no result data and no plots** — only the optimizer, the training
@@ -110,29 +137,45 @@ pace-train model=smollm2_1.7b optimizer=pace schedule=const \
     dataset.path=data/smoltalk
 ```
 
-A run writes `{config, summary, eval_logs}` as JSON under `runs/`;
-`summary.final_val_loss` is the plotted metric. W&B logging is off by default, and
-the optimizer's per-step telemetry (gradient/pullback norms, clip fraction) is gated
+A run writes `{config, summary, eval_logs, step_logs}` as JSON under `runs/`;
+`summary.final_val_loss` is the plotted metric (`final_train_loss` is recorded too).
+The metric convention follows the paper: `val_loss`/`ema_val_loss` are the **returned
+(EMA)** weights, `vanilla_val_loss` is the final iterate. W&B logging is off by default,
+and the optimizer's per-step telemetry (gradient/pullback norms, clip fraction) is gated
 behind `optimizer.log_stats` — leave it off for the fastest path. Training runs a
 single pass and does not checkpoint/resume; size `training.max_steps` accordingly.
+
+### Data recipe (exact, reproducible)
+
+`pace.data.prepare_sft` rebuilds the paper's SFT data byte-for-byte. Defaults:
+`dataset="HuggingFaceTB/smol-smoltalk"`, `max_seq_len=1280`, `subset_ratio=0.5`,
+`seed=42`, using the dataset's native `train` / `test` splits (a fixed seeded
+`random.sample` subset of each). With a SmolLM2 tokenizer this yields the same
+**113,832 train / 11,986 val** tokenized examples used for the figures. Tokenization is
+hand-rolled ChatML — each turn is `<|im_start|>{role}\n{content}<|im_end|>\n` with the
+header and body tokenized separately and `add_special_tokens=False` (so **no BOS** is
+prepended and **no system turn** is injected); labels are `-100` everywhere except the
+assistant turn's **body** (the assistant header is masked). `max_train`/`max_val`
+instead stream a small deterministic first-N slice for a quick self-contained test.
 
 ## Tests
 
 ```bash
-uv run pytest -q                   # fast: optimizer parity + config map + standalone gate
+uv run pytest -q                   # fast: optimizer parity + config map + result fixtures
 ```
 
-- `tests/test_optimizer_parity.py` — `c=0 == torch.AdamW` (up to fp ordering) and that
-  the EMA eval-swap never perturbs training (plus bit-identical parity vs a reference
-  if `PACE_REF_OPTIMIZER` is set). Torch-only, runs anywhere.
-- `tests/test_cli_map.py`, `tests/test_standalone.py` — the reproduction map is complete
-  and the repo is lightweight/self-contained.
+- `tests/test_optimizer_parity.py` — `c=0 == torch.AdamW` (up to fp ordering), the EMA
+  eval-swap never perturbs training, and the core optimizer imports with torch only (plus
+  bit-identical parity vs a reference if `PACE_REF_OPTIMIZER` is set). Runs anywhere.
+- `tests/test_cli_map.py` — the figure→config reproduction map is complete and every
+  curve expands to a well-formed `pace-train` command.
 - `tests/test_result_fixtures.py` — checks the two bundled PACE result fixtures
   (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B run) parse, are
-  genuinely PACE runs, and match their recorded `final_val_loss`. Offline, no GPU.
+  genuinely PACE runs, and match their recorded **train and val** loss. Offline, no GPU.
 - `tests/test_train_smoke.py` — **self-contained training test**: downloads a model +
-  smol-smoltalk from HuggingFace and runs PACE end-to-end (no bundled data). You choose
-  how long via env vars:
+  smol-smoltalk from HuggingFace and runs PACE end-to-end (no bundled data), then checks
+  the final train/val loss against a committed reference within `PACE_SMOKE_TOL` (loose by
+  default, since same-seed runs drift across hardware). Length is env-configurable:
   ```bash
   uv run pytest tests/test_train_smoke.py                       # SmolLM2-135M, 20 steps
   PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py   # train longer

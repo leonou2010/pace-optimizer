@@ -65,7 +65,8 @@ class PACE(torch.optim.Optimizer):
             and ``train()`` swaps them back.
         ema_kappa: exponent ``kappa`` of the decaying EMA schedule. ``None`` uses
             the fixed ``beta_ema`` instead.
-        ema_rho: offset ``rho`` before the schedule begins to decay.
+        ema_rho: offset ``rho`` before the schedule begins to decay. Default ``0``
+            gives the paper's ``(1 + gamma*t)^(-kappa)`` schedule.
         ema_gamma: schedule rate ``gamma``.
         ema_update_freq: update the EMA every this many steps.
         log_stats: if True, compute per-step telemetry (lambda/clip-fraction and
@@ -86,7 +87,7 @@ class PACE(torch.optim.Optimizer):
         beta_ema: float = 0.01,
         use_ema_eval: bool = False,
         ema_kappa: Optional[float] = None,
-        ema_rho: float = 10.0,
+        ema_rho: float = 0.0,
         ema_gamma: float = 1.0,
         ema_update_freq: int = 1,
         log_stats: bool = False,
