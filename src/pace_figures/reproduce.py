@@ -1,11 +1,11 @@
 """Expand a paper-figure config into the exact `pace-train` commands that
 reproduce its runs — the static reproduction map. Prints the commands by
-default; pass `+run=true` (and `+data=<prepared dataset>`) to execute them and
+default; pass `run=true` (and `data=<prepared dataset>`) to execute them and
 emit the result JSONs.
 
     pace-figure fig=list            # the figure catalog
     pace-figure fig=fig1            # print the pace-train commands for Fig 1's curves
-    pace-figure fig=fig1 +run=true +data=/path/to/smoltalk   # train them -> result JSONs
+    pace-figure fig=fig1 run=true data=/path/to/smoltalk   # train them -> result JSONs
 
 Each figure config (conf/fig/<id>.yaml) lists its curves; every curve is a
 complete training spec, so the printed command is exactly what a normal user
@@ -110,20 +110,26 @@ def main(cfg: DictConfig):
     limit = cfg.get("limit")
 
     print(f"# {fig.id} ({fig.get('paper', '')}): {fig.get('desc', '')} — {len(curves)} runs\n")
-    out_root = Path(cfg.get("out") or (REPO / "runs" / fig.id))
+    out_root = Path(cfg.get("out") or (Path.cwd() / "runs" / fig.id))
+    # When running from a source checkout (not pip-installed), make `pace` importable
+    # for the child process; harmless when the package is installed.
+    src = REPO / "src"
+    base_env = dict(os.environ)
+    if src.is_dir():
+        base_env["PYTHONPATH"] = str(src) + os.pathsep + base_env.get("PYTHONPATH", "")
     for i, c in enumerate(curves):
         cmd = _command(fig, c, extra)
         print(" ".join(cmd))
         if run and (limit is None or i < limit):
             label = f"{c['model']}_{c['method']}_{c['schedule']}_s{c['seed']}"
-            env = dict(os.environ, PYTHONPATH=str(REPO / "src"),
-                       PACE_RUN_DIR=str(out_root / label))
+            env = dict(base_env, PACE_RUN_DIR=str(out_root / label))
             subprocess.run([sys.executable, "-m", "pace.train"] + cmd[1:], env=env, check=False)
 
     if not run:
         ds = fig.get("dataset", "smoltalk")
         print(f"\n# Run these (after preparing the {ds} dataset, see README) with, e.g.:")
         print(f"#   pace-figure fig={fig.id} run=true data=/path/to/{ds}")
+        return
 
 
 if __name__ == "__main__":

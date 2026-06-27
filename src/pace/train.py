@@ -102,6 +102,7 @@ def build_optimizer(model, opt_cfg):
         ema_kappa=opt_cfg.get("ema_kappa"), ema_rho=opt_cfg.get("ema_rho", 0.0),
         ema_gamma=opt_cfg.get("ema_gamma", 1.0),
         ema_update_freq=opt_cfg.get("ema_update_freq", 1),
+        log_stats=opt_cfg.get("log_stats", True),
     )
     opt.train()
     print(f"  Optimizer: PACE (c={opt_cfg.lambda_pullback}, kappa={opt_cfg.get('ema_kappa')}, "

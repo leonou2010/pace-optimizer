@@ -85,8 +85,19 @@ def prepare_sft(
             split = ds["train"].train_test_split(test_size=val_size, seed=seed)
             train_raw, val_raw = split["train"], split["test"]
 
+    sample = train_raw[0] if len(train_raw) else {}
+    if not (sample.get("messages") or sample.get("conversations")):
+        raise ValueError(
+            "prepare_sft expects a chat/SFT dataset with a 'messages' or "
+            "'conversations' field; raw-text / pretraining corpora (e.g. FineWeb) "
+            "are not supported by the shipped SFT trainer."
+        )
+
     def _render(example):
         msgs = example.get("messages") or example.get("conversations")
+        if not msgs:  # defensively skip a malformed row (emit an all-masked example)
+            return {"input_ids": [tok.pad_token_id] * max_seq_len,
+                    "attention_mask": [0] * max_seq_len, "labels": [-100] * max_seq_len}
         # Render incrementally: tokenize the conversation prefix after each turn and
         # take the newly added tokens as that turn's segment. This keeps any template
         # preamble (e.g. a system header on the first turn) attached correctly and

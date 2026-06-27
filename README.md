@@ -90,6 +90,13 @@ Expected PACE `final_val_loss`: 0.6911 / 0.7103 / 0.8576. Train them with
 `uv run pace-figure fig=fig1 run=true data=<prepared dataset>` or by running the
 printed commands.
 
+**Scope.** The shipped trainer is a fine-tuning (SFT) trainer, so the fine-tuning
+figures (Fig 1, 3, 6, 7, 10, 11, 14–17 and the clip-fraction figures) reproduce
+end-to-end. The GPT-2 / FineWeb **pretraining** figures (Fig 5, 9, 18, 19, 20) are
+catalogued in the map for completeness, but were produced with a separate pretraining
+pipeline that is not included here; `pace-figure` prints their configs but the SFT
+trainer cannot run a raw-text corpus.
+
 ## Train
 
 Training is configured with [Hydra](https://hydra.cc); config groups live in
@@ -104,7 +111,10 @@ pace-train model=smollm2_1.7b optimizer=pace schedule=const \
 ```
 
 A run writes `{config, summary, eval_logs}` as JSON under `runs/`;
-`summary.final_val_loss` is the plotted metric. W&B logging is off by default.
+`summary.final_val_loss` is the plotted metric. W&B logging is off by default, and
+the optimizer's per-step telemetry (gradient/pullback norms, clip fraction) is gated
+behind `optimizer.log_stats` — leave it off for the fastest path. Training runs a
+single pass and does not checkpoint/resume; size `training.max_steps` accordingly.
 
 ## Tests
 
@@ -117,6 +127,9 @@ uv run pytest -q                   # fast: optimizer parity + config map + stand
   if `PACE_REF_OPTIMIZER` is set). Torch-only, runs anywhere.
 - `tests/test_cli_map.py`, `tests/test_standalone.py` — the reproduction map is complete
   and the repo is lightweight/self-contained.
+- `tests/test_result_fixtures.py` — checks the two bundled PACE result fixtures
+  (`tests/fixtures/results/`, one SmolLM2-135M and one SmolLM2-1.7B run) parse, are
+  genuinely PACE runs, and match their recorded `final_val_loss`. Offline, no GPU.
 - `tests/test_train_smoke.py` — **self-contained training test**: downloads a model +
   smol-smoltalk from HuggingFace and runs PACE end-to-end (no bundled data). You choose
   how long via env vars:

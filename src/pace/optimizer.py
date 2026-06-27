@@ -68,6 +68,10 @@ class PACE(torch.optim.Optimizer):
         ema_rho: offset ``rho`` before the schedule begins to decay.
         ema_gamma: schedule rate ``gamma``.
         ema_update_freq: update the EMA every this many steps.
+        log_stats: if True, compute per-step telemetry (lambda/clip-fraction and
+            update norms) exposed via ``get_step_stats``. Off by default because each
+            stat calls ``.item()`` (a GPU sync) every step; the optimizer math is
+            identical either way. Enable it for analysis/figure reproduction.
     """
 
     def __init__(
@@ -85,6 +89,7 @@ class PACE(torch.optim.Optimizer):
         ema_rho: float = 10.0,
         ema_gamma: float = 1.0,
         ema_update_freq: int = 1,
+        log_stats: bool = False,
     ):
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr}")
@@ -112,6 +117,7 @@ class PACE(torch.optim.Optimizer):
             ema_rho=ema_rho,
             ema_gamma=ema_gamma,
             ema_update_freq=ema_update_freq,
+            log_stats=log_stats,
             train_mode=True,
         )
         super().__init__(params, defaults)
@@ -177,19 +183,23 @@ class PACE(torch.optim.Optimizer):
             ema_kappa = group['ema_kappa']
             ema_rho = group['ema_rho']
             ema_gamma = group['ema_gamma']
+            log_stats = group['log_stats']
 
-            # Accumulators for per-step stats (running, no tensor accumulation)
-            raw_lam_sum = 0.0   # decay / (sqrt(v_hat) + eps), before c and lr
-            raw_lam_max = -float('inf')
-            raw_lam_min = float('inf')
-            lam_sum = 0.0       # after lr * c * raw and clamp
-            lam_max = -float('inf')
-            lam_min = float('inf')
-            clipped_count = 0
-            total_count = 0
-            adam_step_norms_sq = 0.0
-            pullback_norms_sq = 0.0
-            update_norms_sq = 0.0
+            # Per-step logging accumulators — only used when log_stats is on. They
+            # call .item() each step (a GPU sync), so gating them keeps the core
+            # optimizer step sync-free in production; the algorithm runs regardless.
+            if log_stats:
+                raw_lam_sum = 0.0   # decay / (sqrt(v_hat) + eps), before c and lr
+                raw_lam_max = -float('inf')
+                raw_lam_min = float('inf')
+                lam_sum = 0.0       # after lr * c * raw and clamp
+                lam_max = -float('inf')
+                lam_min = float('inf')
+                clipped_count = 0
+                total_count = 0
+                adam_step_norms_sq = 0.0
+                pullback_norms_sq = 0.0
+                update_norms_sq = 0.0
 
             for p in group['params']:
                 if p.grad is None:
@@ -237,8 +247,8 @@ class PACE(torch.optim.Optimizer):
                 # Adam step (m_hat, v_hat_sqrt are fp32; addcdiv_ handles mixed dtypes)
                 p.data.addcdiv_(m_hat, v_hat_sqrt, value=-lr)
 
-                # Track adam step norm (includes weight decay)
-                adam_step_norms_sq += (p.data.float() - p_before).norm().square().item()
+                if log_stats:
+                    adam_step_norms_sq += (p.data.float() - p_before).norm().square().item()
 
                 # Phase B: lr-scaled, per-coordinate pullback toward the EMA.
                 # lam_i = lr * c * decay / (sqrt(v_hat_i) + eps), clamped to <= 1.
@@ -256,32 +266,33 @@ class PACE(torch.optim.Optimizer):
                     # Reuse v_hat_sqrt tensor (not needed after this, safe to mutate).
                     lam = v_hat_sqrt.reciprocal_().mul_(decay)
 
-                    # Track raw lambda stats (before c, lr, and clamp)
-                    n = lam.numel()
-                    raw_lam_sum += lam.sum().item()
-                    raw_lam_max = max(raw_lam_max, lam.max().item())
-                    raw_lam_min = min(raw_lam_min, lam.min().item())
-                    total_count += n
+                    if log_stats:
+                        raw_lam_sum += lam.sum().item()
+                        raw_lam_max = max(raw_lam_max, lam.max().item())
+                        raw_lam_min = min(raw_lam_min, lam.min().item())
+                        total_count += lam.numel()
 
                     # multiply by lr * c
                     lam.mul_(lr * lambda_pullback)
                     if clamp_pullback:
-                        clipped_count += (lam >= 1.0).sum().item()
+                        if log_stats:
+                            clipped_count += (lam >= 1.0).sum().item()
                         lam.clamp_(max=1.0)
 
-                    # Track final lambda stats (after lr * c and clamp)
-                    lam_sum += lam.sum().item()
-                    lam_max = max(lam_max, lam.max().item())
-                    lam_min = min(lam_min, lam.min().item())
+                    if log_stats:
+                        lam_sum += lam.sum().item()
+                        lam_max = max(lam_max, lam.max().item())
+                        lam_min = min(lam_min, lam.min().item())
 
                     # pullback = lam * (ema - p_before)
                     diff = state['ema'] - p_before  # 1 new tensor (p_before needed later)
                     diff.mul_(lam)                   # in-place, now = pullback displacement
                     p.data.add_(diff)
-                    pullback_norms_sq += diff.norm().square().item()
+                    if log_stats:
+                        pullback_norms_sq += diff.norm().square().item()
 
-                # Track total update norm
-                update_norms_sq += (p.data.float() - p_before).norm().square().item()
+                if log_stats:
+                    update_norms_sq += (p.data.float() - p_before).norm().square().item()
 
                 # Phase C: EMA update (gated by ema_update_freq)
                 if 'ema' in state:
@@ -297,23 +308,23 @@ class PACE(torch.optim.Optimizer):
                     # Keep theta in sync every step for train/eval swaps
                     state['theta'].copy_(p.data)
 
-            # Aggregate per-step stats
-            if total_count > 0:
-                self._last_raw_lambda_mean = raw_lam_sum / total_count
-                self._last_raw_lambda_max = raw_lam_max
-                self._last_raw_lambda_min = raw_lam_min
-                self._last_lambda_mean = lam_sum / total_count
-                self._last_lambda_max = lam_max
-                self._last_lambda_min = lam_min
-                self._last_lambda_clipped_frac = clipped_count / total_count
-                # effective = lr * c * raw (before clamp)
-                self._last_effective_lambda_mean = lr * lambda_pullback * (raw_lam_sum / total_count)
-                self._last_effective_lambda_max = lr * lambda_pullback * raw_lam_max
-                self._last_effective_lambda_min = lr * lambda_pullback * raw_lam_min
-
-            self._last_adam_step_norm = math.sqrt(adam_step_norms_sq)
-            self._last_pullback_norm = math.sqrt(pullback_norms_sq)
-            self._last_update_norm = math.sqrt(update_norms_sq)
+            # Aggregate per-step stats (only when logging)
+            if log_stats:
+                if total_count > 0:
+                    self._last_raw_lambda_mean = raw_lam_sum / total_count
+                    self._last_raw_lambda_max = raw_lam_max
+                    self._last_raw_lambda_min = raw_lam_min
+                    self._last_lambda_mean = lam_sum / total_count
+                    self._last_lambda_max = lam_max
+                    self._last_lambda_min = lam_min
+                    self._last_lambda_clipped_frac = clipped_count / total_count
+                    # effective = lr * c * raw (before clamp)
+                    self._last_effective_lambda_mean = lr * lambda_pullback * (raw_lam_sum / total_count)
+                    self._last_effective_lambda_max = lr * lambda_pullback * raw_lam_max
+                    self._last_effective_lambda_min = lr * lambda_pullback * raw_lam_min
+                self._last_adam_step_norm = math.sqrt(adam_step_norms_sq)
+                self._last_pullback_norm = math.sqrt(pullback_norms_sq)
+                self._last_update_norm = math.sqrt(update_norms_sq)
 
         return loss
 
@@ -359,9 +370,4 @@ class PACE(torch.optim.Optimizer):
         return None
 
 
-# Backwards-compatible alias: the experiment code referred to this class as
-# ``EMARegularizedAdamWV4``. Keeping the alias lets the parity test compare the
-# two implementations directly.
-EMARegularizedAdamWV4 = PACE
-
-__all__ = ["PACE", "EMARegularizedAdamWV4"]
+__all__ = ["PACE"]

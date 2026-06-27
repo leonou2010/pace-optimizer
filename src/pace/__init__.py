@@ -5,7 +5,7 @@ The public entry point is the :class:`~pace.optimizer.PACE` optimizer. Setting
 the EMA-evaluation baseline.
 """
 
-from pace.optimizer import PACE, EMARegularizedAdamWV4
+from pace.optimizer import PACE
 
-__all__ = ["PACE", "EMARegularizedAdamWV4"]
+__all__ = ["PACE"]
 __version__ = "0.1.0"

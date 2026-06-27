@@ -18,9 +18,6 @@ __pycache__/
 # os
 .DS_Store
 
-# large extended data (fetched via data/download_extended.sh)
-data/extended/
-
 # cluster-internal validation tooling
 scripts/smoke.sbatch
 scripts/verify_repo.sh
