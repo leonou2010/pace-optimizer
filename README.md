@@ -9,10 +9,24 @@ a clipped strength.
 In the paper it beats AdamW and EMA-evaluated AdamW on 1–2B fine-tuning and on
 GPT-2 / FineWeb pretraining, across a range of learning rates and schedules.
 
+Each optimizer step `t` (per coordinate `i`), as implemented:
+
 ```
-theta_{t+1} = (theta_t - AdamW_step) + lambda_{t,i} * (ema_{t-1} - theta_t)
-lambda_{t,i} = clamp( lr * c * decay_t / (sqrt(v_hat_i) + eps),  max = 1 )
+# 1. AdamW step (decoupled weight decay + Adam), using the second moment v_hat
+theta'      = theta_t - AdamW_step(theta_t)
+
+# 2. pullback toward the EMA (applied every step; reference is the PRE-Adam theta_t)
+decay_t     = (1 + gamma * max(0, t - rho))^(-kappa)      # gamma=1, rho=0 by default -> (1+t)^(-kappa), floored at 1e-4
+lambda_{t,i}= clamp( lr * c * decay_t / (sqrt(v_hat_i) + eps),  max = 1 )
+theta_{t+1} = theta' + lambda_{t,i} * (ema_{t-1} - theta_t)
+
+# 3. EMA update (every `ema_update_freq` steps)
+ema_t       = (1 - beta_t) * ema_{t-1} + beta_t * theta_{t+1},   beta_t = decay_t
 ```
+
+With `use_ema_eval=True` the model you evaluate/return is the EMA (`ema_t`). Note the
+pullback (step 2) is applied on every step; only the EMA update (step 3) honors
+`ema_update_freq`.
 
 ## Use the optimizer
 
