@@ -5,12 +5,11 @@ return a multiplicative factor in ``[0, 1]`` applied to the base learning rate
 (suitable for ``torch.optim.lr_scheduler.LambdaLR``).
 
   - ``const``            : warmup, then a constant learning rate.
-  - ``cos``              : warmup, then a cosine decay to zero.
+  - ``cos``              : warmup, then a cosine decay **to zero** (the "cosine"
+                           schedule in the paper; all schedules end at LR 0).
   - ``wsd``              : warmup-stable-decay — constant for the first
                            ``1 - decay_frac`` of training, then a linear decay to
                            zero over the final ``decay_frac`` (default 0.2).
-  - ``cosine_to_zero``   : alias of ``cos`` (cosine decaying to zero), kept as an
-                           explicit name for clarity.
 
 PACE is designed to run at a *constant* learning rate; the decay schedules are
 provided for the baseline comparisons.
@@ -57,7 +56,7 @@ def make_lr_lambda(name: str, total_steps: int, warmup_steps: int = 0,
         progress = min(1.0, (step - decay_start) / decay_steps)
         return max(0.0, 1.0 - progress)
 
-    table = {"const": const, "cos": cos, "cosine_to_zero": cos, "wsd": wsd}
+    table = {"const": const, "cos": cos, "wsd": wsd}
     if name not in table:
         raise ValueError(f"Unknown schedule '{name}'. Options: {sorted(table)}")
     return table[name]

@@ -94,7 +94,7 @@ printed commands.
 
 Training is configured with [Hydra](https://hydra.cc); config groups live in
 `src/pace/conf/`: `model/`, `dataset/`, `optimizer/` (`adamw` | `ema` | `pace`),
-`schedule/` (`const` | `cos` | `wsd` | `cosine_to_zero`). Prepare a dataset once
+`schedule/` (`const` | `cos` | `wsd`; `cos` decays to zero). Prepare a dataset once
 with `pace.data.prepare_sft`, then:
 
 ```bash
