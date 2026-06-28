@@ -117,9 +117,9 @@ single pass with no checkpoint/resume, so set `training.max_steps` accordingly.
 `prepare_sft` renders each conversation as hand-rolled ChatML
 (`<|im_start|>{role}\n{content}<|im_end|>\n`, header and body tokenized separately, no BOS
 and no injected system turn), masks every non-assistant token to `-100`, and pads to
-`max_seq_len` (1280 in the paper). Example selection is deterministic — the first
-`subset_ratio` of each native split — and the `smol-smoltalk` revision is pinned, so the
-prepared dataset is reproducible across runs and machines.
+`max_seq_len` (1280 in the paper). The full dataset is used by default; `subset_ratio < 1`
+keeps a seeded random subset. The `smol-smoltalk` revision is pinned, so the prepared
+dataset is reproducible across runs and machines.
 
 ## Reproducing the paper
 
@@ -144,9 +144,7 @@ figure; each is a complete `pace-train` spec. Figure 1 (best configuration per m
 The map fixes the optimizer hyperparameters, schedule, and seed. The fine-tuning figures
 run end-to-end through the shipped SFT trainer; the GPT-2 / FineWeb pretraining figures
 (Fig 5, 9, 18–20) are catalogued for reference but were produced with a separate
-pretraining pipeline that is not included here. The exact per-run configurations behind
-the figures (including effective batch size) are recorded in the bundled result fixtures
-under `tests/fixtures/results/`.
+pretraining pipeline that is not included here.
 
 Every console command also runs as a module: `python -m pace.train …` and
 `python -m pace_figures.reproduce fig=…`.
@@ -154,20 +152,17 @@ Every console command also runs as a module: `python -m pace.train …` and
 ## Tests
 
 ```bash
-uv run pytest -q                    # offline: optimizer math + result alignment
+uv run pytest tests/test_optimizer_math.py -q   # offline, CPU
 ```
 
 - **`tests/test_optimizer_math.py`** — optimizer correctness. Drives AdamW, EMA, and PACE
   with a fixed gradient sequence on CPU and checks the Adam moments, the EMA accumulator,
   the pullback gain, and the parameter update, step by step, against an independent
   float64 reference. Deterministic; no GPU, network, or data.
-- **`tests/test_result_fixtures.py`** — empirical alignment. Validates the two bundled real
-  PACE runs (SmolLM2-135M and SmolLM2-1.7B): correct structure, genuine PACE runs, and
-  recorded train and validation losses that match the figures and decrease. Offline.
-
-An optional end-to-end test, `tests/test_train_smoke.py`, downloads a model and exercises
-the full data and training pipeline (needs network and a GPU); see the file for the
-environment variables that control its length.
+- **`tests/test_pipeline.py`** — end-to-end flow. Prepares data and runs the figure map
+  through the real `pace-figure` → `pace-train` path on the small model, so one test
+  exercises every module. Needs network and a GPU. Two reference runs are committed under
+  `tests/fixtures/results/`.
 
 ## Citation
 
