@@ -132,8 +132,8 @@ uv run pace-figure fig=list         # the figure catalog
 uv run pace-figure fig=fig1         # print the pace-train commands for Figure 1
 ```
 
-Each figure config (`src/pace_figures/conf/fig/<id>.yaml`) lists its curves; every curve is
-a complete training spec. Figure 1 (best configuration per method) uses:
+Each figure config (`src/pace_figures/conf/fig/<id>.yaml`) lists the runs behind that
+figure; each is a complete `pace-train` spec. Figure 1 (best configuration per method) uses:
 
 | model | PACE lr | PACE c | PACE κ | baselines |
 |-------|---------|--------|--------|-----------|

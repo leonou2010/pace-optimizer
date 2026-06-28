@@ -12,11 +12,9 @@ Tokenization follows the paper's SFT recipe: each turn is rendered as hand-rolle
 ChatML ``<|im_start|>{role}\n{content}<|im_end|>\n`` with the header and body
 tokenized separately and ``add_special_tokens=False`` (no BOS is prepended and no
 system turn is injected); labels are ``-100`` everywhere except the assistant turn's
-body (the assistant header is masked). Example selection is deterministic — the first
-``subset_ratio`` of each native split, in order — and the dataset revision is pinned,
-so re-running ``prepare_sft`` always produces identical data. The exact configurations
-behind the paper figures are recorded in the bundled result fixtures
-(``tests/fixtures/results/``).
+body (the assistant header is masked). The full dataset is used by default;
+``subset_ratio < 1`` takes a seeded random subset. The dataset revision is pinned, so
+``prepare_sft`` produces identical data across machines.
 """
 
 import os
@@ -116,19 +114,21 @@ def prepare_sft(
     dataset_name: str = SMOLTALK_REPO,
     max_seq_len: int = 1280,
     subset_ratio: float = 1.0,
+    seed: int = 42,
     revision: Optional[str] = None,
     max_train: Optional[int] = None,
     max_val: Optional[int] = None,
 ) -> str:
     """Build a tokenized, response-masked SFT dataset and save it to ``out_dir``.
 
-    Selection is deterministic: the first ``subset_ratio`` of the dataset's native
-    ``train`` / ``test`` splits, in order. For ``HuggingFaceTB/smol-smoltalk`` the
-    revision is pinned (``SMOLTALK_REVISION``) unless ``revision`` is given, so the
-    prepared data is reproducible. ``max_train`` / ``max_val`` instead stream a small
-    first-N slice (avoiding a full download) for a self-contained test; the
-    per-conversation tokenization is identical in both paths.
+    Uses the full dataset by default; ``subset_ratio < 1`` keeps a seeded random
+    subset of each native split. For ``HuggingFaceTB/smol-smoltalk`` the revision is
+    pinned (``SMOLTALK_REVISION``) unless ``revision`` is given, so the prepared data is
+    reproducible. ``max_train`` / ``max_val`` instead stream a small first-N slice
+    (avoiding a full download) for a self-contained test; the per-conversation
+    tokenization is identical in every path.
     """
+    import random
     from datasets import load_dataset
     from transformers import AutoTokenizer
 
@@ -153,16 +153,22 @@ def prepare_sft(
         ds = load_dataset(dataset_name, revision=rev)
         train_split = ds["train"]
         val_split = ds.get("test") or ds.get("validation")
-        n_train = int(len(train_split) * subset_ratio)
+
+        def subset(split, ratio):
+            if ratio >= 1.0:
+                return split
+            n = int(len(split) * ratio)
+            idx = sorted(random.Random(seed).sample(range(len(split)), n))
+            return split.select(idx)
+
         if val_split is not None:
-            n_val = int(len(val_split) * subset_ratio)
-            train_rows = train_split.select(range(n_train))
-            val_rows = val_split.select(range(n_val))
+            train_rows = subset(train_split, subset_ratio)
+            val_rows = subset(val_split, subset_ratio)
         else:
             # No native eval split: hold out the last 5% of train for validation.
             n_val = max(1, int(len(train_split) * 0.05))
             cut = len(train_split) - n_val
-            train_rows = train_split.select(range(min(n_train, cut)))
+            train_rows = subset(train_split.select(range(cut)), subset_ratio)
             val_rows = train_split.select(range(cut, len(train_split)))
 
     sample = train_rows[0] if len(train_rows) else {}
