@@ -114,12 +114,11 @@ single pass with no checkpoint/resume, so set `training.max_steps` accordingly.
 
 ### Data
 
-`prepare_sft` renders each conversation as hand-rolled ChatML
-(`<|im_start|>{role}\n{content}<|im_end|>\n`, header and body tokenized separately, no BOS
-and no injected system turn), masks every non-assistant token to `-100`, and pads to
-`max_seq_len` (1280 in the paper). The full dataset is used by default; `subset_ratio < 1`
-keeps a seeded random subset. The `smol-smoltalk` revision is pinned, so the prepared
-dataset is reproducible across runs and machines.
+`prepare_sft` formats each conversation in ChatML and trains only on the assistant
+replies — system, user, and the role headers are masked out of the loss. Sequences are
+padded to `max_seq_len` (1280 in the paper). It uses the whole dataset by default; set
+`subset_ratio < 1` for a smaller seeded sample. The smol-smoltalk revision is pinned, so
+you get the same data every time.
 
 ## Reproducing the paper
 
