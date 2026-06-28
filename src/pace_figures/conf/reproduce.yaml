@@ -2,13 +2,13 @@ defaults:
   - fig: fig1
   - _self_
 
-run: false          # run=true to actually train the curves (else just print the commands)
+run: false          # run=true to train the runs (else just print the commands)
 data: null          # data=/path/to/prepared/dataset (required when run=true)
-max_steps: null     # max_steps=N to cap steps (e.g. a quick check)
-eval_samples: null  # eval_samples=N to cap validation samples (quick check)
+max_steps: null     # max_steps=N to cap steps
+eval_samples: null  # eval_samples=N to cap validation samples
 eval_interval: null # eval_interval=N to override eval cadence
-limit: null         # limit=N to only run the first N curves (the rest are still printed)
-out: null           # output dir for runs (defaults to ./runs/<fig>)
+limit: null         # limit=N to only run the first N (the rest are still printed)
+out: null           # output dir (defaults to ./runs/<fig>)
 
 hydra:
   run:

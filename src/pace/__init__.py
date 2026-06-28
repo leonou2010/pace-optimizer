@@ -1,9 +1,4 @@
-"""PACE — an AdamW variant with an lr-scaled pullback toward an EMA of the iterates.
-
-The public entry point is the :class:`~pace.optimizer.PACE` optimizer. Setting
-``lambda_pullback=0`` recovers plain AdamW; adding ``use_ema_eval=True`` recovers
-the EMA-evaluation baseline.
-"""
+"""PACE: AdamW with a pullback toward an EMA of the iterates (:class:`pace.optimizer.PACE`)."""
 
 from pace.optimizer import PACE
 

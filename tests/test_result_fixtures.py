@@ -1,17 +1,8 @@
-"""Validation of the bundled PACE result fixtures.
+"""Validate the two bundled PACE result files (SmolLM2-135M and -1.7B).
 
-The repository ships two real PACE fine-tuning runs (SmolLM2-135M and SmolLM2-1.7B)
-under tests/fixtures/results/ so the result format and the reported figures can be
-checked offline. These tests verify, for each fixture:
-
-- the JSON has the expected {config, summary, eval_logs} structure;
-- it is a PACE run (config.optimizer.lambda_pullback > 0);
-- summary.final_val_loss matches the recorded value (within 1e-3) and
-  summary.final_train_loss is present and positive;
-- the train and validation loss trajectories in eval_logs both decrease from start
-  to finish, and all recorded train losses are finite.
-
-test_both_models_present confirms both fixture files exist. Offline; no GPU or network.
+For each: the JSON is well-formed, it's a PACE run (lambda_pullback > 0), and its
+recorded train/val losses match and decrease. Reads the files only -- no training,
+no GPU. Lets anyone check the result format and the paper numbers offline.
 """
 
 import json
@@ -21,7 +12,7 @@ import pytest
 
 FIX = Path(__file__).parent / "fixtures" / "results"
 
-# (file, expected final_val_loss) — real PACE runs.
+# (file, expected final_val_loss)
 FIXTURES = [
     ("smollm2_135m_pace.json", 1.0390),   # small model
     ("smollm2_1.7b_pace.json", 0.6911),   # big model (Fig 1 headline)

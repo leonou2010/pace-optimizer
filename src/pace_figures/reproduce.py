@@ -57,10 +57,10 @@ def _command(fig, curve, extra):
 
 
 def _expand_sweep(sw):
-    """Expand a compact `sweep` block (cartesian product of `grid` over `base`)
-    into the same list-of-curves form `_command` consumes. Grid keys may be dotted
-    (e.g. `optimizer.lr`) or plain (`schedule`, `seed`, `model`). A figure may carry
-    one `sweep`, a list of `sweeps`, and/or an explicit `curves` list."""
+    """Expand a `sweep` block (a `grid` cartesian product over a `base`) into runs.
+
+    Grid keys may be dotted (`optimizer.lr`) or plain (`schedule`, `seed`, `model`).
+    """
     import itertools
     base = sw.get("base", {})
     grid = {k: list(v) for k, v in (sw.get("grid", {}) or {}).items()}

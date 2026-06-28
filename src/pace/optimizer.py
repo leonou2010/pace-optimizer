@@ -1,37 +1,5 @@
-"""PACE — Pullback-Augmented, Constant-LR-friendly Estimation.
-
-PACE is AdamW with an additive, per-coordinate pullback toward an exponential
-moving average (EMA) of the iterates. The pullback gain is scaled by the learning
-rate and inversely by the Adam second-moment estimate, so its strength tracks the
-size of the Adam step automatically (no pullback when ``lr -> 0``, e.g. during
-warmup).
-
-Update (per coordinate ``i`` at step ``t``)::
-
-    # Phase A — standard AdamW
-    m       = b1*m + (1-b1)*g
-    v       = b2*v + (1-b2)*g^2
-    theta'  = theta - lr*wd*theta - lr * m_hat / (sqrt(v_hat) + eps)
-
-    # Phase B — pullback toward the EMA (reference is the PRE-Adam theta)
-    decay     = (1 + gamma * max(0, t - rho))^(-kappa)         # floored at 1e-4
-    lambda_i  = clamp( lr * c * decay / (sqrt(v_hat_i) + eps), max=1 )
-    theta_t1  = theta' + lambda_i * (ema - theta)
-
-    # Phase C — EMA update (every ``ema_update_freq`` steps)
-    beta_t    = (1 + gamma * max(0, t - rho))^(-kappa)         # floored at 1e-4
-    ema       = (1 - beta_t)*ema + beta_t*theta_t1
-
-Special cases:
-  * ``lambda_pullback == 0`` and ``use_ema_eval == False`` -> the EMA buffer is
-    never allocated and the update reduces to AdamW (matching
-    ``torch.optim.AdamW`` up to floating-point ordering).
-  * ``lambda_pullback == 0`` and ``use_ema_eval == True``  -> training follows
-    plain AdamW; evaluation swaps in the EMA weights (the "EMA" baseline).
-  * ``lambda_pullback > 0``                                 -> full PACE.
-
-All optimizer state is kept in fp32 (moments, EMA, and the saved training
-weights) to avoid bf16 accumulation error, matching ``torch.optim.AdamW``.
+"""The PACE optimizer: AdamW plus a per-coordinate pullback toward an EMA of the
+iterates. See the README for the update rule and the parameter table.
 """
 
 import math
@@ -186,14 +154,12 @@ class PACE(torch.optim.Optimizer):
             ema_gamma = group['ema_gamma']
             log_stats = group['log_stats']
 
-            # Per-step logging accumulators — only used when log_stats is on. They
-            # call .item() each step (a GPU sync), so gating them keeps the core
-            # optimizer step sync-free in production; the algorithm runs regardless.
+            # logging accumulators (gated to avoid a per-step .item() GPU sync)
             if log_stats:
-                raw_lam_sum = 0.0   # decay / (sqrt(v_hat) + eps), before c and lr
+                raw_lam_sum = 0.0   # gain before c and lr
                 raw_lam_max = -float('inf')
                 raw_lam_min = float('inf')
-                lam_sum = 0.0       # after lr * c * raw and clamp
+                lam_sum = 0.0       # gain after c, lr and clamp
                 lam_max = -float('inf')
                 lam_min = float('inf')
                 clipped_count = 0
@@ -209,9 +175,7 @@ class PACE(torch.optim.Optimizer):
                 grad = p.grad
                 state = self.state[p]
 
-                # Initialize state on first step. All states in fp32 to avoid
-                # bf16 precision loss in moment accumulation and EMA tracking
-                # (PyTorch AdamW does the same).
+                # init state on first step; keep it fp32 (like torch AdamW)
                 if len(state) == 0:
                     state['step'] = 0
                     state['m'] = torch.zeros_like(p.data, dtype=torch.float32)
@@ -238,38 +202,29 @@ class PACE(torch.optim.Optimizer):
                 m_hat = m / bias_correction1
                 v_hat_sqrt = (v / bias_correction2).sqrt_().add_(eps)
 
-                # Save p before update; the pullback references the pre-Adam theta.
-                # Must be an independent copy: in fp32 ``.float()`` returns the same
-                # tensor, so the in-place weight-decay/Adam steps below would otherwise
-                # also mutate this snapshot and the pullback would reference the
-                # post-Adam weights. ``.clone()`` keeps it a true pre-Adam snapshot in
-                # every dtype (a no-op difference for bf16, which already copies).
+                # snapshot the pre-Adam weights for the pullback reference; clone
+                # because in fp32 .float() would alias and the in-place steps below
+                # would otherwise overwrite it
                 p_before = p.data.clone().float()
 
-                # Weight decay (decoupled, AdamW-style)
+                # decoupled weight decay, then the Adam step
                 if weight_decay != 0:
                     p.data.add_(p.data, alpha=-lr * weight_decay)
-
-                # Adam step (m_hat, v_hat_sqrt are fp32; addcdiv_ handles mixed dtypes)
                 p.data.addcdiv_(m_hat, v_hat_sqrt, value=-lr)
 
                 if log_stats:
                     adam_step_norms_sq += (p.data.float() - p_before).norm().square().item()
 
-                # Phase B: lr-scaled, per-coordinate pullback toward the EMA.
-                # lam_i = lr * c * decay / (sqrt(v_hat_i) + eps), clamped to <= 1.
-                # The reference point is the pre-Adam theta (p_before), so the full
-                # Adam step from Phase A is always preserved (purely additive).
+                # Phase B: pull toward the EMA by lam = clamp(lr*c*decay/(sqrt(v_hat)+eps), 1),
+                # measured from the pre-Adam theta so the Adam step is preserved
                 if lambda_pullback > 0 and 'ema' in state:
-                    # EMA decay schedule (same schedule as Phase C)
                     if ema_kappa is not None:
                         t_eff = max(0, t - ema_rho)
                         decay = max((1.0 + ema_gamma * t_eff) ** (-ema_kappa), 1e-4)
                     else:
-                        decay = 1.0  # no decay when using fixed beta_ema
+                        decay = 1.0  # fixed beta_ema -> no decay
 
-                    # raw_lam = decay / (sqrt(v_hat) + eps)  — before c and lr.
-                    # Reuse v_hat_sqrt tensor (not needed after this, safe to mutate).
+                    # reuse v_hat_sqrt (done with it) to build the gain
                     lam = v_hat_sqrt.reciprocal_().mul_(decay)
 
                     if log_stats:
@@ -278,7 +233,6 @@ class PACE(torch.optim.Optimizer):
                         raw_lam_min = min(raw_lam_min, lam.min().item())
                         total_count += lam.numel()
 
-                    # multiply by lr * c
                     lam.mul_(lr * lambda_pullback)
                     if clamp_pullback:
                         if log_stats:
@@ -290,9 +244,8 @@ class PACE(torch.optim.Optimizer):
                         lam_max = max(lam_max, lam.max().item())
                         lam_min = min(lam_min, lam.min().item())
 
-                    # pullback = lam * (ema - p_before)
-                    diff = state['ema'] - p_before  # 1 new tensor (p_before needed later)
-                    diff.mul_(lam)                   # in-place, now = pullback displacement
+                    diff = state['ema'] - p_before
+                    diff.mul_(lam)
                     p.data.add_(diff)
                     if log_stats:
                         pullback_norms_sq += diff.norm().square().item()

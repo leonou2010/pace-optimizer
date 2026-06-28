@@ -1,12 +1,12 @@
 id: fig1
 paper: "Fig 1"
 desc: "Best-per-method validation loss (finetuning)"
-dataset: smoltalk          # finetuning data shared by all curves
+dataset: smoltalk          # finetuning data shared by all runs
 
-# Each curve is a complete training spec. To regenerate the underlying run:
+# Each run below is a complete training spec, e.g.:
 #   pace-train model=<model> optimizer=<optimizer.name> schedule=<schedule> seed=<seed> \
 #       optimizer.lr=<lr> optimizer.lambda_pullback=<c> optimizer.ema_kappa=<kappa>
-# Baselines (AdamW/EMA) use their best decay schedule; PACE uses a constant LR.
+# baselines (AdamW/EMA) use their best decay schedule; PACE uses a constant LR
 curves:
   # ---- SmolLM2-1.7B ----
   - {model: smollm2_1.7b, method: AdamW, schedule: cos,   seed: 42, optimizer: {name: adamw, lr: 0.001,  lambda_pullback: 0.0}}

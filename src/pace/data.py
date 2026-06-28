@@ -1,20 +1,5 @@
-"""Dataset loading and preparation for PACE training.
-
-Training consumes a tokenized dataset saved with HuggingFace ``datasets``
-(``save_to_disk``) under ``<path>/train`` and ``<path>/val``; each example has
-``input_ids``, ``attention_mask`` and ``labels`` (non-assistant tokens masked to
-``-100``), padded to a fixed ``max_seq_len``.
-
-``prepare_sft`` builds such a dataset from a HuggingFace chat dataset (e.g.
-``HuggingFaceTB/smol-smoltalk``); ``load_prepared`` loads an existing one.
-
-Tokenization follows the paper's SFT recipe: each turn is rendered as hand-rolled
-ChatML ``<|im_start|>{role}\n{content}<|im_end|>\n`` with the header and body
-tokenized separately and ``add_special_tokens=False`` (no BOS is prepended and no
-system turn is injected); labels are ``-100`` everywhere except the assistant turn's
-body (the assistant header is masked). The full dataset is used by default;
-``subset_ratio < 1`` takes a seeded random subset. The dataset revision is pinned, so
-``prepare_sft`` produces identical data across machines.
+"""Prepare and load tokenized SFT data. ``prepare_sft`` builds a dataset from a chat
+dataset; ``load_prepared`` loads one. See the README for the data recipe.
 """
 
 import os
@@ -23,7 +8,7 @@ from typing import Optional, Tuple
 import torch
 from datasets import load_from_disk
 
-# Pinned revision of HuggingFaceTB/smol-smoltalk, so prepared data is stable over time.
+# pinned smol-smoltalk revision, so prepared data stays stable over time
 SMOLTALK_REPO = "HuggingFaceTB/smol-smoltalk"
 SMOLTALK_REVISION = "f73fe857d519ff6ac5af2ea67c4d3834da7b8bcc"
 
@@ -46,17 +31,12 @@ def load_prepared(path: str, max_samples: Optional[int] = None) -> Tuple:
 
 
 def tokenize_conversation(messages, tokenizer, max_seq_len):
-    """Tokenize a conversation with response-only masking (hand-rolled ChatML).
-
-    Each turn renders to ``<|im_start|>{role}\\n`` (header) + ``{content}<|im_end|>\\n``
-    (body), tokenized separately with ``add_special_tokens=False``. The header is
-    always masked; the body is supervised only for assistant turns.
-    """
+    """Tokenize a conversation as ChatML, supervising only the assistant responses."""
     input_ids, labels = [], []
     for msg in messages:
         role = msg.get("role") or msg.get("from")
         content = msg.get("content") or msg.get("value")
-        # ShareGPT-style role names ("gpt") map onto the ChatML "assistant" role.
+        # ShareGPT "gpt" role maps onto the ChatML "assistant" role
         is_assistant = role in ("assistant", "gpt")
 
         header_ids = tokenizer.encode(f"<|im_start|>{role}\n", add_special_tokens=False)
@@ -119,14 +99,10 @@ def prepare_sft(
     max_train: Optional[int] = None,
     max_val: Optional[int] = None,
 ) -> str:
-    """Build a tokenized, response-masked SFT dataset and save it to ``out_dir``.
+    """Tokenize an SFT dataset and save it under ``out_dir/{train,val}``.
 
-    Uses the full dataset by default; ``subset_ratio < 1`` keeps a seeded random
-    subset of each native split. For ``HuggingFaceTB/smol-smoltalk`` the revision is
-    pinned (``SMOLTALK_REVISION``) unless ``revision`` is given, so the prepared data is
-    reproducible. ``max_train`` / ``max_val`` instead stream a small first-N slice
-    (avoiding a full download) for a self-contained test; the per-conversation
-    tokenization is identical in every path.
+    Full dataset by default; ``subset_ratio < 1`` keeps a seeded random subset.
+    ``max_train``/``max_val`` instead stream a tiny first-N slice for a quick test.
     """
     import random
     from datasets import load_dataset

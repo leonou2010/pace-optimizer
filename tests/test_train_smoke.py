@@ -1,32 +1,11 @@
-"""End-to-end training test for a freshly cloned repository.
+"""End-to-end test: download a model + smol-smoltalk, train PACE, and check the final
+losses against a committed reference. Needs network and (ideally) a GPU.
 
-Downloads a model and the smol-smoltalk dataset from HuggingFace, builds the training
-data with the standard recipe, and runs PACE through the real `pace.train` entry point.
-It then verifies that:
+Tunable via env vars (defaults shown):
 
-- the training process completes successfully and writes a result JSON with the
-  {config, summary, eval_logs} structure;
-- the run is a PACE run (lambda_pullback > 0), the EMA evaluation is populated, and the
-  optimizer's lambda statistics are recorded;
-- the final train and validation losses are finite and agree with a committed reference
-  (tests/fixtures/smoke_reference.json) within PACE_SMOKE_TOL.
-
-No bundled data or cluster paths; requires network access and uses a GPU when available.
-
-The run is configured through environment variables, all with defaults:
-
-    PACE_TEST_STEPS=20           # number of optimizer steps to train
-    PACE_TEST_TRAIN=512          # training examples ('all' = the full dataset)
-    PACE_TEST_VAL=128            # validation examples ('all' = the full set)
-    PACE_TEST_BIG=1              # also run SmolLM2-1.7B (default: SmolLM2-135M only)
-    PACE_SMOKE_TOL=0.30          # tolerance for the final-loss check vs the reference
-
-The prepared dataset is cached under ~/.cache/pace_test/, so subsequent runs repeat only
-the training. The validation loss is computed over the full prepared validation set.
-
-    uv run pytest tests/test_train_smoke.py
-    PACE_TEST_STEPS=200 uv run pytest tests/test_train_smoke.py    # train longer
-    PACE_TEST_TRAIN=all PACE_TEST_STEPS=1778 uv run pytest ...     # full-scale run
+    PACE_TEST_STEPS=20   PACE_TEST_TRAIN=512   PACE_TEST_VAL=128
+    PACE_TEST_BIG=1      # also run SmolLM2-1.7B
+    PACE_SMOKE_TOL=0.30  # tolerance vs the reference
 """
 
 import json
@@ -45,10 +24,8 @@ TRAIN = os.environ.get("PACE_TEST_TRAIN", "512")
 VAL = os.environ.get("PACE_TEST_VAL", "128")
 CACHE = Path(os.environ.get("PACE_TEST_DATA_CACHE", Path.home() / ".cache" / "pace_test"))
 
-# Reference final losses for the DEFAULT smoke config (SmolLM2-135M, 20 steps,
-# train=512, val=128, seq_len=512, seed=42, const schedule, warmup=1) live in the
-# fixture file, not in code. Same-seed runs drift across hardware / library versions, so
-# the check is within PACE_SMOKE_TOL and is skipped if any knob above is overridden.
+# reference losses for the default config live in the fixture, checked within a
+# tolerance (runs drift across hardware) and only when the knobs are at their defaults
 import json as _json  # noqa: E402
 
 _REF = _json.load(open(Path(__file__).parent / "fixtures" / "smoke_reference.json"))
@@ -65,8 +42,7 @@ def _prepare_data(hf_model):
     """Prepare (and cache) a tokenized smol-smoltalk dataset for this model."""
     n_train = None if TRAIN.lower() == "all" else int(TRAIN)
     n_val = None if VAL.lower() == "all" else int(VAL)
-    # `r2` is the data-recipe version: bump it whenever the tokenization changes so a
-    # stale cache from an older recipe is never silently reused.
+    # `r2` is the recipe version; bump it when tokenization changes to bust stale caches
     tag = f"{hf_model.split('/')[-1]}_{TRAIN}_{VAL}_r2"
     out = CACHE / tag
     if (out / "train").exists() and (out / "val").exists():
@@ -93,7 +69,7 @@ def test_pace_trains(cfg_name, hf_model, tmp_path):
         "training.batch_size=2", "training.gradient_accumulation_steps=1",
         f"training.max_steps={STEPS}",
         f"training.eval_interval={max(1, STEPS // 2)}",
-        # eval_samples left at its default (null) -> final eval over the FULL val set
+        # eval_samples left null -> final eval over the full val set
         "schedule.warmup_steps=1", "seed=42",
     ]
     r = subprocess.run(cmd, env=env, cwd=str(REPO), capture_output=True, text=True)
@@ -117,7 +93,7 @@ def test_pace_trains(cfg_name, hf_model, tmp_path):
           f"final_train_loss={ft:.4f} final_val_loss={fv:.4f} "
           f"lambda_clipped_frac={last['lambda_clipped_frac']:.4f}")
 
-    # Numeric check against the committed reference (default config only).
+    # numeric check vs the reference (default config only)
     ref = SMOKE_REF.get(cfg_name) if AT_DEFAULTS else None
     if ref and ref.get("final_val_loss") is not None:
         assert abs(fv - ref["final_val_loss"]) <= SMOKE_TOL, (

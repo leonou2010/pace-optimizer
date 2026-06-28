@@ -1,21 +1,5 @@
-"""PACE training entry point (Hydra).
-
-A single, clean training loop for PACE / AdamW / EMA on a tokenized SFT dataset.
-Ported from the research training loop, keeping the parts that matter for
-reproducibility — deterministic seeding, gradient accumulation, the metric
-convention (``val_loss`` follows the EMA weights when ``use_ema_eval`` is set,
-``vanilla_val_loss`` always follows the training weights), per-step logging, and
-the result-JSON schema (``{config, summary, eval_logs}``) — and dropping the
-research-only extras (extra baseline-optimizer branches and sharpness /
-interpolation diagnostics). Logging to Weights & Biases is optional.
-
-Run::
-
-    uv run pace-train model=smollm2_135m optimizer=pace schedule=const \\
-        dataset.path=/path/to/prepared/smoltalk
-
-The optimizer is selected by config: ``optimizer=adamw`` (plain AdamW),
-``optimizer=ema`` (AdamW + EMA evaluation), ``optimizer=pace`` (full PACE).
+"""Hydra training entry point (``pace-train``) for PACE / AdamW / EMA on a tokenized
+SFT dataset. The optimizer is chosen by config; see the README for usage.
 """
 
 import json
@@ -265,8 +249,7 @@ def main(cfg: DictConfig) -> float:
                     stop = True
                     break
 
-    # Final eval over the full validation set (or eval_samples, if a cap is set —
-    # null leaves it full, which is what real runs use for the reported metric).
+    # final eval on the full val set (unless eval_samples caps it)
     final_eval_n = eval_samples if eval_samples else len(val_ds)
     res = evaluate(model, optimizer, val_loader, final_eval_n, ctx, use_ema_eval)
     best_val = min(best_val, res["val_loss"])

@@ -1,18 +1,9 @@
-"""Deterministic math tests for the three optimizer modes (AdamW, EMA, PACE).
+"""Check the optimizer math for AdamW, EMA, and PACE.
 
-Each test drives the optimizer with a fixed sequence of gradients on CPU and compares
-its internal state and parameters, step by step, against an independent reference
-implementation written in float64 (``_reference_step``). This verifies the update math
-directly rather than against another copy of itself:
-
-- test_adamw_math: with lambda_pullback=0 and use_ema_eval=False, the Adam moments
-  (m, v) and the parameter update match the reference and torch.optim.AdamW.
-- test_ema_math: with use_ema_eval=True, the EMA accumulator matches the reference, the
-  training weights still follow AdamW, and eval()/train() swap to the EMA and back.
-- test_pace_math: with lambda_pullback>0, the per-coordinate pullback gain lambda and
-  the resulting parameter update match the reference, including the <=1 clamp.
-
-CPU-only and fully deterministic; no GPU, network, or bundled data.
+Each test runs the optimizer on fixed gradients and compares its state (Adam moments,
+EMA, pullback gain) and weights, step by step, against an independent float64 reference
+-- so the update rule is checked directly, not against another copy of itself.
+CPU-only and deterministic; no GPU, network, or data.
 """
 
 import numpy as np
@@ -20,7 +11,7 @@ import torch
 
 from pace import PACE
 
-# Fixed problem: 4 parameters, a fixed initial value, and a fixed gradient per step.
+# fixed problem: 4 params, fixed init, one fixed gradient per step
 P0 = np.array([0.10, -0.20, 0.30, -0.40], dtype=np.float64)
 GRADS = [
     np.array([0.50, -0.30, 0.20, -0.70], dtype=np.float64),
@@ -91,7 +82,7 @@ def test_adamw_math():
         assert np.allclose(st["v"].numpy(), ref[t]["v"], atol=ATOL), f"v mismatch at step {t+1}"
         assert np.allclose(p.detach().numpy(), ref[t]["p"], atol=ATOL), f"p mismatch at step {t+1}"
 
-    # Cross-check against the library AdamW.
+    # cross-check against torch's AdamW
     pt = torch.tensor(P0, dtype=torch.float32, requires_grad=True)
     aw = torch.optim.AdamW([pt], lr=LR, betas=(B1, B2), eps=EPS, weight_decay=WD)
     for t in range(len(GRADS)):
@@ -129,7 +120,7 @@ def test_pace_math():
         assert np.allclose(p.detach().numpy(), ref[t]["p"], atol=ATOL), f"pace p mismatch at {t+1}"
         assert np.allclose(st["ema"].numpy(), ref[t]["ema"], atol=ATOL), f"ema mismatch at {t+1}"
 
-    # The pullback must be active (not degenerate) and differ from plain AdamW.
+    # the pullback must be active and actually change the trajectory vs AdamW
     _, ref_lam = ref[0]["p"], ref[0]["lam"]
     assert ref_lam is not None and np.all(ref_lam > 0) and np.all(ref_lam <= 1.0)
     adamw = _reference(c=0.0, use_ema=False)
