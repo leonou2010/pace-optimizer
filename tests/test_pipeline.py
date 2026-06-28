@@ -47,8 +47,11 @@ def test_pipeline_runs_small_model(tmp_path):
     pace_ran = False
     for j in results:
         d = json.load(open(j))
-        fv = d["summary"]["final_val_loss"]
+        opt, fv = d["config"]["optimizer"], d["summary"]["final_val_loss"]
+        steps = d["summary"]["total_steps"]
+        print(f"  trained {opt['name']:5} lr={opt['lr']} c={opt.get('lambda_pullback')} "
+              f"-> {steps} steps, final_val_loss={fv:.4f}")
         assert fv == fv and fv < 100, f"{j.name}: bad final_val_loss {fv}"
-        if d["config"]["optimizer"].get("lambda_pullback", 0) > 0:
+        if opt.get("lambda_pullback", 0) > 0:
             pace_ran = True
     assert pace_ran, "no PACE run produced in the pipeline"
