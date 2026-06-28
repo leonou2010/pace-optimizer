@@ -14,19 +14,21 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[1]
-STEPS = int(os.environ.get("PACE_TEST_STEPS", "3"))
+STEPS = int(os.environ.get("PACE_TEST_STEPS", "5"))
+# enough data for a few optimizer steps at the config's effective batch size (128)
+TRAIN = int(os.environ.get("PACE_TEST_TRAIN", "1024"))
 CACHE = Path(os.environ.get("PACE_TEST_DATA_CACHE", Path.home() / ".cache" / "pace_test"))
 
 
 def test_pipeline_runs_small_model(tmp_path):
     sys.path.insert(0, str(REPO / "src"))
     # 1. prepare a tiny dataset (exercises pace.data)
-    data = CACHE / "pipeline_135m"
+    data = CACHE / f"pipeline_135m_{TRAIN}"
     if not (data / "train").exists():
         try:
             from pace.data import prepare_sft
             prepare_sft(str(data), tokenizer_name="HuggingFaceTB/SmolLM2-135M",
-                        max_seq_len=256, max_train=256, max_val=64)
+                        max_seq_len=256, max_train=TRAIN, max_val=128)
         except Exception as e:
             pytest.skip(f"could not fetch model/data from HuggingFace: {e}")
 
