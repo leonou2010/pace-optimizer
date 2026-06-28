@@ -134,8 +134,11 @@ def _opt_stats(optimizer):
     return out
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="config")
-def main(cfg: DictConfig) -> float:
+def run_training(cfg: DictConfig) -> float:
+    """Train for a composed config and return the best validation loss.
+
+    This is the importable core; ``main`` is the Hydra CLI wrapper around it.
+    """
     set_seed(cfg.seed)
     run_name = make_run_name(cfg)
     print("=" * 70)
@@ -267,7 +270,11 @@ def main(cfg: DictConfig) -> float:
                "final_val_loss": res["val_loss"], "total_sec": total_time,
                "total_hours": total_time / 3600, "total_steps": global_step}
 
-    out_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    try:  # the Hydra run dir when launched as a CLI; else PACE_RUN_DIR (or cwd)
+        out_dir = hydra.core.hydra_config.HydraConfig.get().runtime.output_dir
+    except Exception:
+        out_dir = os.environ.get("PACE_RUN_DIR", "runs")
+    os.makedirs(out_dir, exist_ok=True)
     results_path = os.path.join(out_dir, f"{run_name}.json")
     with open(results_path, "w") as f:
         json.dump({"config": OmegaConf.to_container(cfg, resolve=True),
@@ -276,6 +283,11 @@ def main(cfg: DictConfig) -> float:
     print(f"\nDONE: best_val_loss={best_val:.4f} | results: {results_path}", flush=True)
     logger.finish()
     return best_val
+
+
+@hydra.main(version_base=None, config_path="conf", config_name="config")
+def main(cfg: DictConfig) -> float:
+    return run_training(cfg)
 
 
 if __name__ == "__main__":

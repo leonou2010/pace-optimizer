@@ -82,6 +82,15 @@ def _expand_sweep(sw):
     return out
 
 
+def expand_figure(fig):
+    """Return all runs for a figure config: explicit ``curves`` plus expanded sweeps."""
+    curves = list(fig.get("curves", []) or [])
+    sweeps = ([fig["sweep"]] if fig.get("sweep") else []) + list(fig.get("sweeps", []) or [])
+    for sw in sweeps:
+        curves += _expand_sweep(sw)
+    return curves
+
+
 @hydra.main(version_base=None, config_path="conf", config_name="reproduce")
 def main(cfg: DictConfig):
     fig = cfg.fig
@@ -89,10 +98,7 @@ def main(cfg: DictConfig):
         _print_map()
         return
 
-    curves = list(fig.get("curves", []) or [])
-    sweeps = ([fig["sweep"]] if fig.get("sweep") else []) + list(fig.get("sweeps", []) or [])
-    for sw in sweeps:
-        curves += _expand_sweep(sw)
+    curves = expand_figure(fig)
     if not curves:
         print(f"No run specs for '{fig.id}' yet — see the README or `pace-figure fig=list`.")
         return
