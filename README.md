@@ -151,8 +151,14 @@ Every console command also runs as a module: `python -m pace.train …` and
 ## Tests
 
 ```bash
-uv run pytest tests/test_optimizer_math.py -q   # offline, CPU
+uv run pytest -q
 ```
+
+A single end-to-end test, **`tests/test_pipeline.py`**, runs the repo's own scripts on the
+small model: it prepares data with `pace.data`, then drives a figure yaml through
+`pace-figure` → `pace-train` (which uses `pace.optimizer`, `pace.schedules`, `pace.model`)
+and checks each run actually trains to a sane loss. Needs network and a GPU. The two
+reference runs behind the figures are committed under `tests/fixtures/results/`.
 
 - **`tests/test_optimizer_math.py`** — optimizer correctness. Drives AdamW, EMA, and PACE
   with a fixed gradient sequence on CPU and checks the Adam moments, the EMA accumulator,
