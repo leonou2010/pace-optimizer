@@ -1,4 +1,4 @@
-"""End-to-end pipeline test, by import (no subprocess).
+"""End-to-end pipeline check, by import (no subprocess).
 
 Runs the repo's own code step by step on the small model:
   1. `pace.data.prepare_sft`            -> tokenize a small slice of smol-smoltalk
@@ -6,8 +6,10 @@ Runs the repo's own code step by step on the small model:
   3. build that run's config from `conf/` (the model/optimizer/schedule yamls)
   4. `pace.train.run_training`          -> train it (uses pace.optimizer / schedules / model)
 
-So one test exercises every module through the real code. Needs network and a GPU.
-The reference runs behind the figures are committed under `tests/fixtures/results/`.
+This verifies the whole pipeline *runs* and trains to a sane loss; it is fast (a small
+slice, a few steps) and is NOT a paper reproduction. Reproducing a figure number requires
+the full dataset and a full run (see the configs in `src/pace_figures/conf/fig/`); the
+committed reference runs live in `tests/fixtures/results/`. Needs network and a GPU.
 """
 import os
 from pathlib import Path
