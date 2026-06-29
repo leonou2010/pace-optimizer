@@ -143,10 +143,7 @@ exact commands. Figure 1, for example, is these runs (one result number each):
 
 Two reference runs are committed under `tests/fixtures/results/`: the SmolLM2-135M Fig 3
 cell (config, per-step train log, losses), which `tests/test_pipeline.py` reproduces
-end-to-end, and the SmolLM2-1.7B Fig 1 headline run (config, losses). Validation losses run
-a touch higher than the paper's — the original training code shows the same shift when run
-today, so it comes from newer `torch`/`transformers`, not the method. The comparison between
-methods is unchanged.
+end-to-end, and the SmolLM2-1.7B Fig 1 headline run (config, losses).
 
 ## Tests
 
