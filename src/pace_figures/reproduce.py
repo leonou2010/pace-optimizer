@@ -118,7 +118,7 @@ def main(cfg: DictConfig):
     print(f"# {fig.id} ({fig.get('paper', '')}): {fig.get('desc', '')} — {len(curves)} runs\n")
     out_root = Path(cfg.get("out") or (Path.cwd() / "runs" / fig.id))
     # When running from a source checkout (not pip-installed), make `pace` importable
-    # for the child process; harmless when the package is installed.
+    # for the child process; harmless when the package is installed
     src = REPO / "src"
     base_env = dict(os.environ)
     if src.is_dir():

@@ -54,7 +54,7 @@ class _StepStats:
             opt._last_lambda_max = self.lam_max
             opt._last_lambda_min = self.lam_min
             opt._last_lambda_clipped_frac = self.clipped / self.count
-            # effective gain = lr * c * raw (before the clamp)
+            # Effective gain = lr * c * raw (before the clamp)
             opt._last_effective_lambda_mean = lr * c * (self.raw_sum / self.count)
             opt._last_effective_lambda_max = lr * c * self.raw_max
             opt._last_effective_lambda_min = lr * c * self.raw_min
@@ -150,7 +150,7 @@ class PACE(torch.optim.Optimizer):
         self._last_pullback_norm = None
         self._last_adam_step_norm = None
         self._last_update_norm = None
-        # effective pullback strength = lr * c * raw_lambda_mean (lr-comparable)
+        # Effective pullback strength = lr * c * raw_lambda_mean (lr-comparable)
         self._last_effective_lambda_mean = None
         self._last_effective_lambda_max = None
         self._last_effective_lambda_min = None
@@ -203,7 +203,7 @@ class PACE(torch.optim.Optimizer):
             ema_gamma = group['ema_gamma']
             log_stats = group['log_stats']
 
-            # telemetry accumulator (gated to avoid per-step .item() GPU syncs)
+            # Telemetry accumulator (gated to avoid per-step .item() GPU syncs)
             stats = _StepStats() if log_stats else None
 
             for p in group['params']:
@@ -213,7 +213,7 @@ class PACE(torch.optim.Optimizer):
                 grad = p.grad
                 state = self.state[p]
 
-                # init state on first step; keep it fp32 (like torch AdamW)
+                # Init state on first step; keep it fp32 (like torch AdamW)
                 if len(state) == 0:
                     state['step'] = 0
                     state['m'] = torch.zeros_like(p.data, dtype=torch.float32)
@@ -240,12 +240,12 @@ class PACE(torch.optim.Optimizer):
                 m_hat = m / bias_correction1
                 v_hat_sqrt = (v / bias_correction2).sqrt_().add_(eps)
 
-                # snapshot the pre-Adam weights for the pullback reference; clone
+                # Snapshot the pre-Adam weights for the pullback reference; clone
                 # because in fp32 .float() would alias and the in-place steps below
                 # would otherwise overwrite it
                 p_before = p.data.clone().float()
 
-                # decoupled weight decay, then the Adam step
+                # Decoupled weight decay, then the Adam step
                 if weight_decay != 0:
                     p.data.add_(p.data, alpha=-lr * weight_decay)
                 p.data.addcdiv_(m_hat, v_hat_sqrt, value=-lr)
@@ -262,7 +262,7 @@ class PACE(torch.optim.Optimizer):
                     else:
                         decay = 1.0  # fixed beta_ema -> no decay
 
-                    # reuse v_hat_sqrt (done with it) to build the gain
+                    # Reuse v_hat_sqrt (done with it) to build the gain
                     lam = v_hat_sqrt.reciprocal_().mul_(decay)
 
                     if log_stats:

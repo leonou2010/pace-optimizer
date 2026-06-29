@@ -63,7 +63,7 @@ def _compose(curve, data_path, full):
 
 
 def test_pipeline_reproduces_fig_number(tmp_path):
-    # the run we reproduce is a real cell of the figure yaml
+    # The run we reproduce is a real cell of the figure yaml
     curve = next((c for c in expand_figure(OmegaConf.load(FIG)) if _matches(c)), None)
     assert curve is not None, "target cell not found in fig3_135m_grid.yaml"
 

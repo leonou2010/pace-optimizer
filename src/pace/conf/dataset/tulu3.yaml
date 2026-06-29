@@ -2,6 +2,6 @@
 # https://huggingface.co/datasets/allenai/tulu-3-sft-mixture
 name: allenai/tulu-3-sft-mixture
 url: https://huggingface.co/datasets/allenai/tulu-3-sft-mixture
-# prepare with pace-data, then override: dataset.path=/path/to/data
+# Prepare with pace-data, then override: dataset.path=/path/to/data
 path: ???
 max_samples: null

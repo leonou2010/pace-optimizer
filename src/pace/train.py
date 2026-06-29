@@ -252,7 +252,7 @@ def run_training(cfg: DictConfig) -> float:
                     stop = True
                     break
 
-    # final eval on the full val set (unless eval_samples caps it)
+    # Final eval on the full val set (unless eval_samples caps it)
     final_eval_n = eval_samples if eval_samples else len(val_ds)
     res = evaluate(model, optimizer, val_loader, final_eval_n, ctx, use_ema_eval)
     best_val = min(best_val, res["val_loss"])

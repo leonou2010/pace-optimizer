@@ -59,7 +59,7 @@ def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
     out_ids, out_attn, out_labels, skipped = [], [], [], 0
     for ex in rows:
         messages = ex.get("messages") or ex.get("conversations")
-        # Skip rows with no assistant content to supervise.
+        # Skip rows with no assistant content to supervise
         if not messages or not any(
             (m.get("role") or m.get("from")) in ("assistant", "gpt") for m in messages
         ):
@@ -73,7 +73,7 @@ def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
         out_attn.append(attn)
         out_labels.append(labels)
 
-    # Pad to a fixed length for efficient batching.
+    # Pad to a fixed length for efficient batching
     for i in range(len(out_ids)):
         pad = max_seq_len - len(out_ids[i])
         out_ids[i] = out_ids[i] + [pad_id] * pad
@@ -113,7 +113,7 @@ def prepare_sft(
         tok.pad_token = tok.eos_token
 
     if max_train:
-        # Streamed first-N slice (no full download); used for the self-contained test.
+        # Streamed first-N slice (no full download); used for the self-contained test
         n_val = max_val or max(1, max_train // 4)
         train_stream = load_dataset(dataset_name, split="train", streaming=True, revision=rev)
         train_rows = [r for _, r in zip(range(max_train), train_stream)]
@@ -138,7 +138,7 @@ def prepare_sft(
             train_rows = subset(train_split, subset_ratio)
             val_rows = subset(val_split, subset_ratio)
         else:
-            # No native eval split: hold out the last 5% of train for validation.
+            # No native eval split: hold out the last 5% of train for validation
             n_val = max(1, int(len(train_split) * 0.05))
             cut = len(train_split) - n_val
             train_rows = subset(train_split.select(range(cut)), subset_ratio)

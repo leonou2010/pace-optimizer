@@ -120,19 +120,20 @@ padded to `max_seq_len` (1280 in the paper). It uses the whole dataset by defaul
 `subset_ratio < 1` for a smaller seeded sample, or pass `revision=` to pin a dataset
 version.
 
-## Reproducing the paper
+## Reproducing a figure number
 
-The repository ships no result data and no plotting code — only the optimizer, the
-training pipeline, and a static map from each paper figure to the exact training configs.
-`pace-figure` expands a figure into the `pace-train` commands that produce its runs:
+To reproduce a figure, prepare the data once and run the figure's training runs:
 
 ```bash
-uv run pace-figure fig=list         # the figure catalog
-uv run pace-figure fig=fig1         # print the pace-train commands for Figure 1
+pace-data --out data/smoltalk --tokenizer HuggingFaceTB/SmolLM2-135M
+
+pace-figure fig=fig3_135m_grid                       # print the pace-train commands
+pace-figure fig=fig3_135m_grid run=true data=data/smoltalk   # train them
 ```
 
-Each figure config (`src/pace_figures/conf/fig/<id>.yaml`) lists the runs behind that
-figure; each is a complete `pace-train` spec. Figure 1 (best configuration per method) uses:
+Each run writes a result JSON under `runs/`; **`summary.final_val_loss` is the plotted
+number.** `pace-figure fig=list` lists every figure, and `pace-figure fig=<id>` prints its
+exact commands. Figure 1, for example, is these runs (one result number each):
 
 | model | PACE lr | PACE c | PACE κ | baselines |
 |-------|---------|--------|--------|-----------|
@@ -140,13 +141,11 @@ figure; each is a complete `pace-train` spec. Figure 1 (best configuration per m
 | Qwen3-1.7B | 5e-4 | 0.25 | 0.5 | AdamW / EMA on cosine decay |
 | Gemma3-1B | 1e-3 | 0.15 | 0.5 | AdamW / EMA on cosine decay |
 
-The map fixes the optimizer hyperparameters, schedule, and seed. Every figure in the map
-is a fine-tuning run that the shipped SFT trainer reproduces end-to-end. (The paper's
-GPT-2 / FineWeb pretraining figures used a separate pretraining pipeline that is not part
-of this repository, so they are not included here.)
-
-Every console command also runs as a module: `python -m pace.train …` and
-`python -m pace_figures.reproduce fig=…`.
+Two reference runs are committed under `tests/fixtures/results/`: the SmolLM2-135M Fig 3
+cell (config, per-step train log, losses), which `tests/test_pipeline.py` reproduces
+end-to-end, and the SmolLM2-1.7B Fig 1 headline run (config, losses). The exact numbers
+depend on the `smol-smoltalk` snapshot; re-running on the current dataset lands within a
+few hundredths of the paper's values.
 
 ## Tests
 
