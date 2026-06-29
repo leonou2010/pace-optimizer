@@ -12,10 +12,6 @@ fig3_135m_grid:
   paper: "Fig 3"
   desc: "Update-frequency x pullback-strength grid"
   models: [SmolLM2-135M]
-fig5_pretraining:
-  paper: "Fig 5"
-  desc: "GPT-2 pretraining: const / c-sweep / WSD"
-  models: [GPT-2-124M]
 fig_appendix_c_kappa_all_models:
   paper: "Fig 6"
   desc: "kappa x c response across 3 models"
@@ -28,10 +24,6 @@ fig_appendix_135m_full_grid:
   paper: "Fig 8"
   desc: "Full (c, kappa, uf) grid"
   models: [SmolLM2-135M]
-fig_appendix_pretrain_kappa_sweep:
-  paper: "Fig 9"
-  desc: "Pretraining c-sweep by kappa"
-  models: [GPT-2-124M]
 fig_appendix_tulu_qwen:
   paper: "Fig 10"
   desc: "Qwen3-1.7B on Tulu-3"
@@ -64,15 +56,3 @@ fig_appendix_multiseed_robust:
   paper: "Fig 17"
   desc: "Seed robustness (seeds 42/1337/2024)"
   models: [SmolLM2-1.7B, Qwen3-1.7B, Gemma3-1B]
-fig_appendix_pretrain_csweep:
-  paper: "Fig 18"
-  desc: "Multi-seed pretraining c-sweep"
-  models: [GPT-2-124M]
-fig_appendix_pretrain_csweep_kappa:
-  paper: "Fig 19"
-  desc: "Pretraining c x kappa by schedule"
-  models: [GPT-2-124M]
-fig_appendix_pretrain_river:
-  paper: "Fig 20"
-  desc: "Token-budget river comparison"
-  models: [GPT-2-124M]

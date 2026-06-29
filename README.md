@@ -140,10 +140,10 @@ figure; each is a complete `pace-train` spec. Figure 1 (best configuration per m
 | Qwen3-1.7B | 5e-4 | 0.25 | 0.5 | AdamW / EMA on cosine decay |
 | Gemma3-1B | 1e-3 | 0.15 | 0.5 | AdamW / EMA on cosine decay |
 
-The map fixes the optimizer hyperparameters, schedule, and seed. The fine-tuning figures
-run end-to-end through the shipped SFT trainer; the GPT-2 / FineWeb pretraining figures
-(Fig 5, 9, 18–20) are catalogued for reference but were produced with a separate
-pretraining pipeline that is not included here.
+The map fixes the optimizer hyperparameters, schedule, and seed. Every figure in the map
+is a fine-tuning run that the shipped SFT trainer reproduces end-to-end. (The paper's
+GPT-2 / FineWeb pretraining figures used a separate pretraining pipeline that is not part
+of this repository, so they are not included here.)
 
 Every console command also runs as a module: `python -m pace.train …` and
 `python -m pace_figures.reproduce fig=…`.
