@@ -170,11 +170,14 @@ def main():
     p.add_argument("--dataset", default=SMOLTALK_REPO, help="HuggingFace chat dataset")
     p.add_argument("--max-seq-len", type=int, default=1280)
     p.add_argument("--subset-ratio", type=float, default=1.0)
+    p.add_argument("--max-train", type=int, default=None,
+                   help="stream only the first N train rows (a quick slice, no full download)")
+    p.add_argument("--max-val", type=int, default=None, help="first N val rows for the slice")
     p.add_argument("--revision", default=None, help="pin a dataset revision")
     args = p.parse_args()
     out = prepare_sft(args.out, tokenizer_name=args.tokenizer, dataset_name=args.dataset,
                       max_seq_len=args.max_seq_len, subset_ratio=args.subset_ratio,
-                      revision=args.revision)
+                      max_train=args.max_train, max_val=args.max_val, revision=args.revision)
     print(f"Saved prepared dataset to {out}/")
 
 

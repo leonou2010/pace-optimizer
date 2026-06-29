@@ -151,21 +151,24 @@ Every console command also runs as a module: `python -m pace.train …` and
 ## Tests
 
 ```bash
-uv run pytest -q                    # quick: pipeline runs and trains to a sane loss
-PACE_TEST_FULL=1 uv run pytest -q   # full: reproduce a figure number (hours, GPU)
+uv run pytest -q                    # both tests, quick mode (needs network + a GPU)
+PACE_TEST_FULL=1 uv run pytest -q   # also reproduce the figure number (full run, hours)
 ```
 
-A single end-to-end test, **`tests/test_pipeline.py`**, imports the repo's own code and
-runs it step by step on the small model: prepare data (`pace.data`), read a figure yaml
-and pick a run (`pace_figures.reproduce`), build its config from `conf/`, and train it
-(`pace.train` → `pace.optimizer` / `pace.schedules` / `pace.model`). So one test exercises
-every module. By default it uses a small slice and a few steps (just checks the pipeline
-runs); with `PACE_TEST_FULL=1` it runs the full dataset and asserts the reproduced
-`final_val_loss` matches the committed reference (`tests/fixtures/results/`) within
-`PACE_REPRO_TOL`. Needs network and a GPU.
+Two tests:
 
-`tests/test_cli.py` separately smoke-checks the console commands (`pace-figure`,
-`pace-data`, `pace-train`) — offline, no GPU.
+- **`tests/test_pipeline.py`** — the pipeline, by import. It runs the repo's code step by
+  step on the small model: prepare data (`pace.data`), read a figure yaml and pick a run
+  (`pace_figures.reproduce`), build its config from `conf/`, and train it (`pace.train` →
+  `pace.optimizer` / `pace.schedules` / `pace.model`). Default: a small slice and a few
+  steps (checks it trains to a sane loss). With `PACE_TEST_FULL=1`: the full dataset, and
+  it asserts the reproduced `final_val_loss` matches the committed reference
+  (`tests/fixtures/results/`) within `PACE_REPRO_TOL`.
+- **`tests/test_cli.py`** — the console commands. `pace-figure` expands the figure map
+  (offline), then the README quickstart runs for real: `pace-data` prepares a small
+  dataset and `pace-train` trains a few steps.
+
+Both train a real model, so they need network and (ideally) a GPU.
 
 ## Citation
 
