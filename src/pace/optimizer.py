@@ -267,25 +267,34 @@ class PACE(torch.optim.Optimizer):
                     # Keep theta in sync every step for train/eval swaps
                     state['theta'].copy_(p.data)
 
-            # Aggregate per-step stats (only when logging)
             if log_stats:
-                if total_count > 0:
-                    self._last_raw_lambda_mean = raw_lam_sum / total_count
-                    self._last_raw_lambda_max = raw_lam_max
-                    self._last_raw_lambda_min = raw_lam_min
-                    self._last_lambda_mean = lam_sum / total_count
-                    self._last_lambda_max = lam_max
-                    self._last_lambda_min = lam_min
-                    self._last_lambda_clipped_frac = clipped_count / total_count
-                    # effective = lr * c * raw (before clamp)
-                    self._last_effective_lambda_mean = lr * lambda_pullback * (raw_lam_sum / total_count)
-                    self._last_effective_lambda_max = lr * lambda_pullback * raw_lam_max
-                    self._last_effective_lambda_min = lr * lambda_pullback * raw_lam_min
-                self._last_adam_step_norm = math.sqrt(adam_step_norms_sq)
-                self._last_pullback_norm = math.sqrt(pullback_norms_sq)
-                self._last_update_norm = math.sqrt(update_norms_sq)
+                self._record_step_stats(
+                    lr, lambda_pullback, total_count,
+                    raw_lam_sum, raw_lam_max, raw_lam_min,
+                    lam_sum, lam_max, lam_min, clipped_count,
+                    adam_step_norms_sq, pullback_norms_sq, update_norms_sq)
 
         return loss
+
+    def _record_step_stats(self, lr, c, total_count, raw_lam_sum, raw_lam_max, raw_lam_min,
+                           lam_sum, lam_max, lam_min, clipped_count,
+                           adam_step_norms_sq, pullback_norms_sq, update_norms_sq):
+        """Store this step's telemetry (read back via get_step_stats)."""
+        if total_count > 0:
+            self._last_raw_lambda_mean = raw_lam_sum / total_count
+            self._last_raw_lambda_max = raw_lam_max
+            self._last_raw_lambda_min = raw_lam_min
+            self._last_lambda_mean = lam_sum / total_count
+            self._last_lambda_max = lam_max
+            self._last_lambda_min = lam_min
+            self._last_lambda_clipped_frac = clipped_count / total_count
+            # effective gain = lr * c * raw (before the clamp)
+            self._last_effective_lambda_mean = lr * c * (raw_lam_sum / total_count)
+            self._last_effective_lambda_max = lr * c * raw_lam_max
+            self._last_effective_lambda_min = lr * c * raw_lam_min
+        self._last_adam_step_norm = math.sqrt(adam_step_norms_sq)
+        self._last_pullback_norm = math.sqrt(pullback_norms_sq)
+        self._last_update_norm = math.sqrt(update_norms_sq)
 
     def get_step_stats(self) -> dict:
         """Return optimizer step stats for logging."""

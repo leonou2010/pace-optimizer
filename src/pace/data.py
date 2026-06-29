@@ -8,9 +8,7 @@ from typing import Optional, Tuple
 import torch
 from datasets import load_from_disk
 
-# pinned smol-smoltalk revision, so prepared data stays stable over time
 SMOLTALK_REPO = "HuggingFaceTB/smol-smoltalk"
-SMOLTALK_REVISION = "f73fe857d519ff6ac5af2ea67c4d3834da7b8bcc"
 
 
 def collate_fn(batch):
@@ -108,8 +106,7 @@ def prepare_sft(
     from datasets import load_dataset
     from transformers import AutoTokenizer
 
-    rev = revision if revision is not None else (
-        SMOLTALK_REVISION if dataset_name == SMOLTALK_REPO else None)
+    rev = revision  # optionally pin a dataset version; None tracks the current one
 
     tok = AutoTokenizer.from_pretrained(tokenizer_name)
     if tok.pad_token is None:
