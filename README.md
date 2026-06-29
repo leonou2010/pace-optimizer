@@ -158,7 +158,7 @@ step on the small model — prepare data (`pace.data`), read a figure yaml and p
 `pace.optimizer` / `pace.schedules` / `pace.model`). Default: a small slice and a few steps
 (checks it trains to a sane loss). With `PACE_TEST_FULL=1`: the full dataset, and it asserts
 the reproduced `final_val_loss` matches the committed reference (`tests/fixtures/results/`)
-within `PACE_REPRO_TOL`. It trains a real model, so it needs network and (ideally) a GPU.
+within `PACE_REPRO_TOL`.
 
 ## Citation
 
