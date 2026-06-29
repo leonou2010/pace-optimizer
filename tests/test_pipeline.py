@@ -1,8 +1,8 @@
 """End-to-end test of the training pipeline.
 
-Imports and runs each stage on the small model: prepare data (``pace.data``), expand a
-figure config and select one run (``pace_figures.reproduce``), build its config from
-``conf/``, and train it (``pace.train.run_training``).
+Imports and runs each stage on the small model: prepare data (``pace.helpers.data``),
+expand a figure config and select one run (``pace_figures.reproduce``), build its config
+from ``conf/``, and train it (``pace.helpers.train.run_training``).
 
 The default mode uses a small data slice and a few steps to check that the pipeline runs
 and reaches a reasonable loss. With ``PACE_TEST_FULL=1`` it trains on the full dataset and
@@ -16,12 +16,12 @@ from pathlib import Path
 import pytest
 from omegaconf import OmegaConf
 
-from pace.data import prepare_sft
-from pace.train import run_training
+from pace.helpers.data import prepare_sft
+from pace.helpers.train import run_training
 from pace_figures.reproduce import expand_figure
 
 REPO = Path(__file__).resolve().parents[1]
-CONF = REPO / "src" / "pace" / "conf"
+CONF = REPO / "src" / "pace" / "helpers" / "conf"
 FIG = REPO / "src" / "pace_figures" / "conf" / "fig" / "fig3_135m_grid.yaml"
 REF = json.load(open(REPO / "tests" / "fixtures" / "results" / "smollm2_135m_pace.json"))
 

@@ -95,7 +95,7 @@ Two arguments place AdamW, EMA-evaluated AdamW, and PACE on one axis:
 ## Training
 
 Training is configured with [Hydra](https://hydra.cc). Config groups live in
-`src/pace/conf/`: `model/`, `dataset/`, `optimizer/` (`adamw` | `ema` | `pace`), and
+`src/pace/helpers/conf/`: `model/`, `dataset/`, `optimizer/` (`adamw` | `ema` | `pace`), and
 `schedule/` (`const` | `cos` | `wsd`). Prepare a tokenized dataset once, then train:
 
 ```bash
@@ -153,9 +153,10 @@ PACE_TEST_FULL=1 uv run pytest -q   # also reproduce the figure number (full run
 ```
 
 **`tests/test_pipeline.py`** runs the pipeline by import: it walks the repo's code step by
-step on the small model — prepare data (`pace.data`), read a figure yaml and pick a run
-(`pace_figures.reproduce`), build its config from `conf/`, and train it (`pace.train` →
-`pace.optimizer` / `pace.schedules` / `pace.model`). Default: a small slice and a few steps
+step on the small model — prepare data (`pace.helpers.data`), read a figure yaml and pick a
+run (`pace_figures.reproduce`), build its config from `conf/`, and train it
+(`pace.helpers.train` → `pace.optimizer` / `pace.helpers.schedules` / `pace.helpers.model`).
+Default: a small slice and a few steps
 (checks it trains to a sane loss). With `PACE_TEST_FULL=1`: the full dataset, and it asserts
 the reproduced `final_val_loss` matches the committed reference (`tests/fixtures/results/`)
 within `PACE_REPRO_TOL`.

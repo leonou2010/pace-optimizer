@@ -127,7 +127,7 @@ def main(cfg: DictConfig):
         if run and (limit is None or i < limit):
             label = f"{c['model']}_{c['method']}_{c['schedule']}_s{c['seed']}"
             env = dict(base_env, PACE_RUN_DIR=str(out_root / label))
-            subprocess.run([sys.executable, "-m", "pace.train"] + cmd[1:], env=env, check=False)
+            subprocess.run([sys.executable, "-m", "pace.helpers.train"] + cmd[1:], env=env, check=False)
 
     if not run:
         ds = fig.get("dataset", "smoltalk")

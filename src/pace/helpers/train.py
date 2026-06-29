@@ -15,10 +15,10 @@ import torch
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from pace.data import collate_fn, load_prepared
-from pace.model import load_model
+from pace.helpers.data import collate_fn, load_prepared
+from pace.helpers.model import load_model
 from pace.optimizer import PACE
-from pace.schedules import build_scheduler
+from pace.helpers.schedules import build_scheduler
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 AMP_DTYPE = torch.bfloat16 if DEVICE == "cuda" else torch.float32
