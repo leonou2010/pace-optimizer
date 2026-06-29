@@ -1,16 +1,13 @@
-"""End-to-end pipeline test, by import (no subprocess).
+"""End-to-end test of the training pipeline.
 
-Runs the repo's own code on the small model: prepare data (`pace.data`), read a figure
-yaml and pick a run (`pace_figures.reproduce.expand_figure`), build its config from
-`conf/`, and train it (`pace.train.run_training`, which uses pace.optimizer / schedules /
-model). One test, every module, real code.
+Imports and runs each stage on the small model: prepare data (``pace.data``), expand a
+figure config and select one run (``pace_figures.reproduce``), build its config from
+``conf/``, and train it (``pace.train.run_training``).
 
-Two modes:
-  * default        -- a small slice and a few steps; checks the pipeline runs and trains
-                      to a sane loss. Fast.
-  * PACE_TEST_FULL -- the full dataset and a full run; reproduces the committed reference
-                      figure number (tests/fixtures/results/) and asserts it within
-                      PACE_REPRO_TOL. Takes hours; needs a GPU.
+The default mode uses a small data slice and a few steps to check that the pipeline runs
+and reaches a reasonable loss. With ``PACE_TEST_FULL=1`` it trains on the full dataset and
+asserts that the final validation loss matches the committed reference
+(``tests/fixtures/results/``) within ``PACE_REPRO_TOL``.
 """
 import json
 import os

@@ -143,31 +143,25 @@ exact commands. Figure 1, for example, is these runs (one result number each):
 
 Two reference runs are committed under `tests/fixtures/results/`: the SmolLM2-135M Fig 3
 cell (config, per-step train log, losses), which `tests/test_pipeline.py` reproduces
-end-to-end, and the SmolLM2-1.7B Fig 1 headline run (config, losses). The exact numbers
-depend on the `smol-smoltalk` snapshot; re-running on the current dataset lands within a
-few hundredths of the paper's values.
+end-to-end, and the SmolLM2-1.7B Fig 1 headline run (config, losses). Validation losses run
+a touch higher than the paper's — the original training code shows the same shift when run
+today, so it comes from newer `torch`/`transformers`, not the method. The comparison between
+methods is unchanged.
 
 ## Tests
 
 ```bash
-uv run pytest -q                    # both tests, quick mode (needs network + a GPU)
+uv run pytest -q                    # quick mode (needs network + a GPU)
 PACE_TEST_FULL=1 uv run pytest -q   # also reproduce the figure number (full run, hours)
 ```
 
-Two tests:
-
-- **`tests/test_pipeline.py`** — the pipeline, by import. It runs the repo's code step by
-  step on the small model: prepare data (`pace.data`), read a figure yaml and pick a run
-  (`pace_figures.reproduce`), build its config from `conf/`, and train it (`pace.train` →
-  `pace.optimizer` / `pace.schedules` / `pace.model`). Default: a small slice and a few
-  steps (checks it trains to a sane loss). With `PACE_TEST_FULL=1`: the full dataset, and
-  it asserts the reproduced `final_val_loss` matches the committed reference
-  (`tests/fixtures/results/`) within `PACE_REPRO_TOL`.
-- **`tests/test_cli.py`** — the console commands. `pace-figure` expands the figure map
-  (offline), then the README quickstart runs for real: `pace-data` prepares a small
-  dataset and `pace-train` trains a few steps.
-
-Both train a real model, so they need network and (ideally) a GPU.
+**`tests/test_pipeline.py`** runs the pipeline by import: it walks the repo's code step by
+step on the small model — prepare data (`pace.data`), read a figure yaml and pick a run
+(`pace_figures.reproduce`), build its config from `conf/`, and train it (`pace.train` →
+`pace.optimizer` / `pace.schedules` / `pace.model`). Default: a small slice and a few steps
+(checks it trains to a sane loss). With `PACE_TEST_FULL=1`: the full dataset, and it asserts
+the reproduced `final_val_loss` matches the committed reference (`tests/fixtures/results/`)
+within `PACE_REPRO_TOL`. It trains a real model, so it needs network and (ideally) a GPU.
 
 ## Citation
 

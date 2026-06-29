@@ -1,16 +1,14 @@
-"""Expand a paper-figure config into the exact `pace-train` commands that
-reproduce its runs — the static reproduction map. Prints the commands by
-default; pass `run=true` (and `data=<prepared dataset>`) to execute them and
-emit the result JSONs.
+"""Expand a paper-figure config into the ``pace-train`` commands that produce its runs.
 
-    pace-figure fig=list            # the figure catalog
-    pace-figure fig=fig1            # print the pace-train commands for Fig 1's curves
-    pace-figure fig=fig1 run=true data=/path/to/smoltalk   # train them -> result JSONs
+By default the commands are printed. Pass ``run=true`` (with ``data=<prepared dataset>``)
+to execute them and write the result JSONs.
 
-Each figure config (conf/fig/<id>.yaml) lists the runs behind that figure; each is a
-complete `pace-train` spec, so the printed command is what a user would run directly.
-There is no bundled data and no plotting: the output is the configs (or, with
-`run=true`, the result JSONs).
+    pace-figure fig=list            # list the figures
+    pace-figure fig=fig1            # print the pace-train commands for Figure 1
+    pace-figure fig=fig1 run=true data=/path/to/smoltalk   # train them and write results
+
+Each figure config (``conf/fig/<id>.yaml``) lists the runs behind that figure; every run
+is a complete ``pace-train`` spec, so a printed command can be run directly.
 """
 
 import os
