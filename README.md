@@ -151,23 +151,18 @@ Every console command also runs as a module: `python -m pace.train …` and
 ## Tests
 
 ```bash
-uv run pytest -q
+uv run pytest -q                    # quick: pipeline runs and trains to a sane loss
+PACE_TEST_FULL=1 uv run pytest -q   # full: reproduce a figure number (hours, GPU)
 ```
 
-A single end-to-end test, **`tests/test_pipeline.py`**, runs the repo's own scripts on the
-small model: it prepares data with `pace.data`, then drives a figure yaml through
-`pace-figure` → `pace-train` (which uses `pace.optimizer`, `pace.schedules`, `pace.model`)
-and checks each run actually trains to a sane loss. Needs network and a GPU. The two
-reference runs behind the figures are committed under `tests/fixtures/results/`.
-
-- **`tests/test_optimizer_math.py`** — optimizer correctness. Drives AdamW, EMA, and PACE
-  with a fixed gradient sequence on CPU and checks the Adam moments, the EMA accumulator,
-  the pullback gain, and the parameter update, step by step, against an independent
-  float64 reference. Deterministic; no GPU, network, or data.
-- **`tests/test_pipeline.py`** — end-to-end flow. Prepares data and runs the figure map
-  through the real `pace-figure` → `pace-train` path on the small model, so one test
-  exercises every module. Needs network and a GPU. Two reference runs are committed under
-  `tests/fixtures/results/`.
+A single end-to-end test, **`tests/test_pipeline.py`**, imports the repo's own code and
+runs it step by step on the small model: prepare data (`pace.data`), read a figure yaml
+and pick a run (`pace_figures.reproduce`), build its config from `conf/`, and train it
+(`pace.train` → `pace.optimizer` / `pace.schedules` / `pace.model`). So one test exercises
+every module. By default it uses a small slice and a few steps (just checks the pipeline
+runs); with `PACE_TEST_FULL=1` it runs the full dataset and asserts the reproduced
+`final_val_loss` matches the committed reference (`tests/fixtures/results/`) within
+`PACE_REPRO_TOL`. Needs network and a GPU.
 
 ## Citation
 
