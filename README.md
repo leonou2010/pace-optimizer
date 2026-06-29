@@ -164,6 +164,9 @@ runs); with `PACE_TEST_FULL=1` it runs the full dataset and asserts the reproduc
 `final_val_loss` matches the committed reference (`tests/fixtures/results/`) within
 `PACE_REPRO_TOL`. Needs network and a GPU.
 
+`tests/test_cli.py` separately smoke-checks the console commands (`pace-figure`,
+`pace-data`, `pace-train`) — offline, no GPU.
+
 ## Citation
 
 ```bibtex
