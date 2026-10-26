@@ -99,14 +99,9 @@ def prepare_sft(
     subset_ratio: float = 1.0,
     seed: int = 42,
     revision: Optional[str] = None,
-    max_train: Optional[int] = None,
-    max_val: Optional[int] = None,
 ) -> str:
     """Tokenize an SFT dataset and save it under ``out_dir/{train,val}``.
-
-    Full dataset by default; ``subset_ratio < 1`` keeps a seeded random subset.
-    ``max_train``/``max_val`` instead stream a tiny first-N slice for a quick test.
-    """
+    Full dataset by default; ``subset_ratio < 1`` keeps a seeded random subset."""
     import random
     from datasets import load_dataset
     from transformers import AutoTokenizer
@@ -117,37 +112,26 @@ def prepare_sft(
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
 
-    if max_train:
-        # Streamed first-N slice (no full download); used for the self-contained test
-        n_val = max_val or max(1, max_train // 4)
-        train_stream = load_dataset(dataset_name, split="train", streaming=True, revision=rev)
-        train_rows = [r for _, r in zip(range(max_train), train_stream)]
-        try:
-            val_stream = load_dataset(dataset_name, split="test", streaming=True, revision=rev)
-        except Exception:
-            val_stream = load_dataset(dataset_name, split="train", streaming=True, revision=rev)
-        val_rows = [r for _, r in zip(range(n_val), val_stream)]
+    ds = load_dataset(dataset_name, revision=rev)
+    train_split = ds["train"]
+    val_split = ds.get("test") or ds.get("validation")
+
+    def subset(split, ratio):
+        if ratio >= 1.0:
+            return split
+        n = int(len(split) * ratio)
+        idx = sorted(random.Random(seed).sample(range(len(split)), n))
+        return split.select(idx)
+
+    if val_split is not None:
+        train_rows = subset(train_split, subset_ratio)
+        val_rows = subset(val_split, subset_ratio)
     else:
-        ds = load_dataset(dataset_name, revision=rev)
-        train_split = ds["train"]
-        val_split = ds.get("test") or ds.get("validation")
-
-        def subset(split, ratio):
-            if ratio >= 1.0:
-                return split
-            n = int(len(split) * ratio)
-            idx = sorted(random.Random(seed).sample(range(len(split)), n))
-            return split.select(idx)
-
-        if val_split is not None:
-            train_rows = subset(train_split, subset_ratio)
-            val_rows = subset(val_split, subset_ratio)
-        else:
-            # No native eval split: hold out the last 5% of train for validation
-            n_val = max(1, int(len(train_split) * 0.05))
-            cut = len(train_split) - n_val
-            train_rows = subset(train_split.select(range(cut)), subset_ratio)
-            val_rows = train_split.select(range(cut, len(train_split)))
+        # No native eval split: hold out the last 5% of train for validation
+        n_val = max(1, int(len(train_split) * 0.05))
+        cut = len(train_split) - n_val
+        train_rows = subset(train_split.select(range(cut)), subset_ratio)
+        val_rows = train_split.select(range(cut, len(train_split)))
 
     sample = train_rows[0] if len(train_rows) else {}
     if not (sample.get("messages") or sample.get("conversations")):
@@ -174,14 +158,11 @@ def main():
     p.add_argument("--dataset", default=SMOLTALK_REPO, help="HuggingFace chat dataset")
     p.add_argument("--max-seq-len", type=int, default=1280)
     p.add_argument("--subset-ratio", type=float, default=1.0)
-    p.add_argument("--max-train", type=int, default=None,
-                   help="stream only the first N train rows (a quick slice, no full download)")
-    p.add_argument("--max-val", type=int, default=None, help="first N val rows for the slice")
     p.add_argument("--revision", default=None, help="pin a dataset revision")
     args = p.parse_args()
     out = prepare_sft(args.out, tokenizer_name=args.tokenizer, dataset_name=args.dataset,
                       max_seq_len=args.max_seq_len, subset_ratio=args.subset_ratio,
-                      max_train=args.max_train, max_val=args.max_val, revision=args.revision)
+                      revision=args.revision)
     print(f"Saved prepared dataset to {out}/")
 
 
