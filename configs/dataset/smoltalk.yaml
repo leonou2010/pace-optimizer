@@ -1,0 +1,4 @@
+# https://huggingface.co/datasets/HuggingFaceTB/smol-smoltalk
+name: HuggingFaceTB/smol-smoltalk
+path: ???          # output of prepare_data.py
+max_samples: null

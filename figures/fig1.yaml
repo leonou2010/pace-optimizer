@@ -4,7 +4,7 @@ desc: "Best-per-method validation loss (finetuning)"
 dataset: smoltalk          # finetuning data shared by all runs
 
 # Each run below is a complete training spec, e.g.:
-#   pace-train model=<model> optimizer=<optimizer.name> schedule=<schedule> seed=<seed> \
+#   python train.py model=<model> optimizer=<optimizer.name> schedule=<schedule> seed=<seed> \
 #       optimizer.lr=<lr> optimizer.lambda_pullback=<c> optimizer.ema_kappa=<kappa>
 # baselines (AdamW/EMA) use their best decay schedule; PACE uses a constant LR
 curves:

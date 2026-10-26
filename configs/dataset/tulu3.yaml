@@ -1,0 +1,4 @@
+# https://huggingface.co/datasets/allenai/tulu-3-sft-mixture
+name: allenai/tulu-3-sft-mixture
+path: ???          # output of prepare_data.py
+max_samples: null

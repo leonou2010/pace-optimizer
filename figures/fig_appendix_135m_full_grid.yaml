@@ -4,7 +4,7 @@ desc: "SmolLM2-135M: full (c, kappa, update-frequency) grid"
 dataset: smoltalk
 
 # Appendix Fig 8 is the full 3x3 (update_freq x EMA-power) version of Fig 3 on the
-# exp13 SmolLM2-135M smoltalk sweep. Exact grid from exp13 run.py:
+# SmolLM2-135M smoltalk sweep. Grid:
 #   LRS=[0.001,0.0015,0.002,0.003,0.005], CS=[1e-4,1e-3,3e-3,1e-2,3e-2,0.1,0.3],
 #   KAPPAS=[0.3,0.5,0.7], UFS=[1,5,10], const schedule, seed 42.
 

@@ -1,5 +1,10 @@
-"""Prepare and load tokenized SFT data. ``prepare_sft`` builds a dataset from a chat
-dataset; ``load_prepared`` loads one. See the README for the data recipe.
+"""Tokenize a chat dataset for train.py.
+
+    python prepare_data.py --out data/smoltalk --tokenizer HuggingFaceTB/SmolLM2-1.7B
+
+Conversations are formatted as ChatML; only assistant turns are supervised (everything
+else gets label -100). Sequences are truncated and padded to --max-seq-len. Writes
+<out>/train and <out>/val as HF datasets.
 """
 
 import os
@@ -149,7 +154,7 @@ def prepare_sft(
         raise ValueError(
             "prepare_sft expects a chat/SFT dataset with a 'messages' or "
             "'conversations' field; raw-text / pretraining corpora (e.g. FineWeb) "
-            "are not supported by the shipped SFT trainer."
+            "are not supported."
         )
 
     pad_id = tok.pad_token_id
@@ -161,10 +166,9 @@ def prepare_sft(
 
 
 def main():
-    """CLI: ``pace-data --out data/smoltalk --tokenizer HuggingFaceTB/SmolLM2-1.7B``."""
     import argparse
 
-    p = argparse.ArgumentParser(description="Prepare a tokenized SFT dataset for pace-train.")
+    p = argparse.ArgumentParser(description="Tokenize a chat dataset for train.py.")
     p.add_argument("--out", required=True, help="output directory (writes <out>/train and <out>/val)")
     p.add_argument("--tokenizer", required=True, help="HuggingFace tokenizer/model name")
     p.add_argument("--dataset", default=SMOLTALK_REPO, help="HuggingFace chat dataset")
