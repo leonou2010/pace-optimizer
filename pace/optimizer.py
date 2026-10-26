@@ -14,55 +14,6 @@ except ImportError:
     ParamsT: TypeAlias = Union[Iterable[torch.Tensor], Iterable[Dict[str, Any]]]
 
 
-class _StepStats:
-    """Accumulates per-step telemetry across params; used only when ``log_stats``.
-
-    Each ``add_*`` call does a ``.item()`` (a GPU sync), so it is gated behind the
-    ``log_stats`` flag in ``step``. ``store`` writes the aggregates onto the optimizer.
-    """
-
-    def __init__(self):
-        self.raw_sum = self.lam_sum = 0.0
-        self.raw_max = self.lam_max = -float("inf")
-        self.raw_min = self.lam_min = float("inf")
-        self.clipped = self.count = 0
-        self.adam_sq = self.pull_sq = self.upd_sq = 0.0
-
-    def add_raw_gain(self, lam):           # raw gain, before c and lr
-        self.raw_sum += lam.sum().item()
-        self.raw_max = max(self.raw_max, lam.max().item())
-        self.raw_min = min(self.raw_min, lam.min().item())
-        self.count += lam.numel()
-
-    def add_clipped(self, lam):            # coords hitting the <=1 clamp
-        self.clipped += (lam >= 1.0).sum().item()
-
-    def add_final_gain(self, lam):         # gain after c, lr and clamp
-        self.lam_sum += lam.sum().item()
-        self.lam_max = max(self.lam_max, lam.max().item())
-        self.lam_min = min(self.lam_min, lam.min().item())
-
-    def add_sq_norm(self, attr, delta):    # running squared norm of a displacement
-        setattr(self, attr, getattr(self, attr) + delta.norm().square().item())
-
-    def store(self, opt, lr, c):           # write aggregates onto the optimizer
-        if self.count > 0:
-            opt._last_raw_lambda_mean = self.raw_sum / self.count
-            opt._last_raw_lambda_max = self.raw_max
-            opt._last_raw_lambda_min = self.raw_min
-            opt._last_lambda_mean = self.lam_sum / self.count
-            opt._last_lambda_max = self.lam_max
-            opt._last_lambda_min = self.lam_min
-            opt._last_lambda_clipped_frac = self.clipped / self.count
-            # Effective gain = lr * c * raw (before the clamp)
-            opt._last_effective_lambda_mean = lr * c * (self.raw_sum / self.count)
-            opt._last_effective_lambda_max = lr * c * self.raw_max
-            opt._last_effective_lambda_min = lr * c * self.raw_min
-        opt._last_adam_step_norm = math.sqrt(self.adam_sq)
-        opt._last_pullback_norm = math.sqrt(self.pull_sq)
-        opt._last_update_norm = math.sqrt(self.upd_sq)
-
-
 class PACE(torch.optim.Optimizer):
     """AdamW with an additive, lr-scaled, per-coordinate pullback toward an EMA.
 
@@ -139,21 +90,7 @@ class PACE(torch.optim.Optimizer):
             train_mode=True,
         )
         super().__init__(params, defaults)
-        # Per-step stats for logging
-        self._last_raw_lambda_mean = None   # decay / (sqrt(v_hat) + eps), before c and lr
-        self._last_raw_lambda_max = None
-        self._last_raw_lambda_min = None
-        self._last_lambda_mean = None       # lr * c * raw_lambda, after clamp
-        self._last_lambda_max = None
-        self._last_lambda_min = None
-        self._last_lambda_clipped_frac = None
-        self._last_pullback_norm = None
-        self._last_adam_step_norm = None
-        self._last_update_norm = None
-        # Effective pullback strength = lr * c * raw_lambda_mean (lr-comparable)
-        self._last_effective_lambda_mean = None
-        self._last_effective_lambda_max = None
-        self._last_effective_lambda_min = None
+        self.step_stats = {}   # filled when log_stats is set; see get_step_stats
 
     @torch.no_grad()
     def eval(self):
@@ -203,8 +140,9 @@ class PACE(torch.optim.Optimizer):
             ema_gamma = group['ema_gamma']
             log_stats = group['log_stats']
 
-            # Telemetry accumulator (gated to avoid per-step .item() GPU syncs)
-            stats = _StepStats() if log_stats else None
+            if log_stats:  # each .item() below is a GPU sync, hence the gate
+                raw, lam_sum, lam_max, lam_min, clipped, count = 0.0, 0.0, -math.inf, math.inf, 0, 0
+                raw_max, raw_min, adam_sq, pull_sq, upd_sq = -math.inf, math.inf, 0.0, 0.0, 0.0
 
             for p in group['params']:
                 if p.grad is None:
@@ -251,7 +189,7 @@ class PACE(torch.optim.Optimizer):
                 p.data.addcdiv_(m_hat, v_hat_sqrt, value=-lr)
 
                 if log_stats:
-                    stats.add_sq_norm("adam_sq", p.data.float() - p_before)
+                    adam_sq += (p.data.float() - p_before).norm().square().item()
 
                 # Phase B: pull toward the EMA by lam = clamp(lr*c*decay/(sqrt(v_hat)+eps), 1),
                 # measured from the pre-Adam theta so the Adam step is preserved
@@ -266,25 +204,28 @@ class PACE(torch.optim.Optimizer):
                     lam = v_hat_sqrt.reciprocal_().mul_(decay)
 
                     if log_stats:
-                        stats.add_raw_gain(lam)
+                        raw += lam.sum().item()
+                        raw_max, raw_min = max(raw_max, lam.max().item()), min(raw_min, lam.min().item())
+                        count += lam.numel()
 
                     lam.mul_(lr * lambda_pullback)
                     if clamp_pullback:
                         if log_stats:
-                            stats.add_clipped(lam)
+                            clipped += (lam >= 1.0).sum().item()
                         lam.clamp_(max=1.0)
 
                     if log_stats:
-                        stats.add_final_gain(lam)
+                        lam_sum += lam.sum().item()
+                        lam_max, lam_min = max(lam_max, lam.max().item()), min(lam_min, lam.min().item())
 
                     diff = state['ema'] - p_before
                     diff.mul_(lam)
                     p.data.add_(diff)
                     if log_stats:
-                        stats.add_sq_norm("pull_sq", diff)
+                        pull_sq += diff.norm().square().item()
 
                 if log_stats:
-                    stats.add_sq_norm("upd_sq", p.data.float() - p_before)
+                    upd_sq += (p.data.float() - p_before).norm().square().item()
 
                 # Phase C: EMA update (gated by ema_update_freq)
                 if 'ema' in state:
@@ -301,33 +242,24 @@ class PACE(torch.optim.Optimizer):
                     state['theta'].copy_(p.data)
 
             if log_stats:
-                stats.store(self, lr, lambda_pullback)
+                self.step_stats = {'adam_step_norm': math.sqrt(adam_sq),
+                                   'pullback_norm': math.sqrt(pull_sq),
+                                   'update_norm': math.sqrt(upd_sq)}
+                if count:
+                    scale = lr * lambda_pullback
+                    self.step_stats.update({
+                        'raw_lambda_mean': raw / count, 'raw_lambda_max': raw_max, 'raw_lambda_min': raw_min,
+                        'lambda_mean': lam_sum / count, 'lambda_max': lam_max, 'lambda_min': lam_min,
+                        'lambda_clipped_frac': clipped / count,
+                        # lr * c * raw gain, before the clamp
+                        'effective_lambda_mean': scale * raw / count,
+                        'effective_lambda_max': scale * raw_max, 'effective_lambda_min': scale * raw_min})
 
         return loss
 
     def get_step_stats(self) -> dict:
-        """Return optimizer step stats for logging."""
-        stats = {}
-        if self._last_raw_lambda_mean is not None:
-            stats['raw_lambda_mean'] = self._last_raw_lambda_mean
-            stats['raw_lambda_max'] = self._last_raw_lambda_max
-            stats['raw_lambda_min'] = self._last_raw_lambda_min
-        if self._last_lambda_mean is not None:
-            stats['lambda_mean'] = self._last_lambda_mean
-            stats['lambda_max'] = self._last_lambda_max
-            stats['lambda_min'] = self._last_lambda_min
-            stats['lambda_clipped_frac'] = self._last_lambda_clipped_frac
-        if self._last_effective_lambda_mean is not None:
-            stats['effective_lambda_mean'] = self._last_effective_lambda_mean
-            stats['effective_lambda_max'] = self._last_effective_lambda_max
-            stats['effective_lambda_min'] = self._last_effective_lambda_min
-        if self._last_adam_step_norm is not None:
-            stats['adam_step_norm'] = self._last_adam_step_norm
-        if self._last_pullback_norm is not None:
-            stats['pullback_norm'] = self._last_pullback_norm
-        if self._last_update_norm is not None:
-            stats['update_norm'] = self._last_update_norm
-        return stats
+        """Pullback gain statistics and update norms from the last step (needs log_stats)."""
+        return dict(self.step_stats)
 
     def get_ema_beta_t(self) -> Optional[float]:
         """Return the current EMA interpolation rate for logging."""
