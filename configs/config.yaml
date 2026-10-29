@@ -11,11 +11,11 @@ out_dir: runs
 training:
   epochs: 1
   batch_size: 8
-  gradient_accumulation_steps: 16   # effective batch size 128
+  gradient_accumulation_steps: ${model.gradient_accumulation_steps}
   grad_clip: 1.0
   eval_interval: 100
   eval_samples: null                # null = full validation set
-  max_steps: null
+  max_steps: ${model.max_steps}
 
 wandb:
   enabled: false

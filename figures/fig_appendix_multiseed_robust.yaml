@@ -1,5 +1,5 @@
 id: fig_appendix_multiseed_robust
-paper: "Fig 17"
+paper: "Fig 19"
 desc: "Seed robustness across 3 models, {const,wsd}, seeds {42,1337,2024}"
 dataset: smoltalk
 

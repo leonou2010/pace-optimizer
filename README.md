@@ -74,7 +74,12 @@ iterate for AdamW.
 
 ## Reproducing the paper
 
-`figures/<id>.yaml` lists the runs behind each figure.
+`figures/<id>.yaml` lists fine-tuning run specifications, using the camera-ready
+figure numbers. Figure 1 uses WSD for all methods and seeds 42, 1337, and 2024;
+`fig_best_per_method_single` is the single-seed comparison in Figure 16.
+Model configs set the paper's batch sizes and step limits. Figure 7 overrides the
+135M limit to 3,557 steps. Data must be prepared separately with each model's
+tokenizer. These commands train runs; they do not plot the paper figures.
 
 ```bash
 python reproduce.py list
@@ -82,9 +87,13 @@ python reproduce.py fig1                               # print the commands
 python reproduce.py fig1 --run --data data/smoltalk    # run them
 ```
 
-`results/` holds two reference runs: the SmolLM2-1.7B Figure 1 PACE run and one
-SmolLM2-135M cell of Figure 3. The GPT-2 pretraining experiments used a separate JAX
-codebase and are not included here.
+`results/` holds two single-seed reference runs: SmolLM2-1.7B PACE and one
+SmolLM2-135M PACE cell. They are not the three-seed averages in Figure 1. The GPT-2
+pretraining experiments used a separate JAX codebase and are not included here.
+Schedule-Free and token-budget branch
+experiments are also not included; Figure 7 specifies only AdamW, EMA, and PACE.
+Figure 6 lists displayed pullback-strength bins; exact source values and the
+original result logs are not bundled.
 
 ## Tests
 

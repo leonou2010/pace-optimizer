@@ -1,2 +1,4 @@
 name: HuggingFaceTB/SmolLM2-1.7B
 max_seq_len: 1280
+gradient_accumulation_steps: 32  # effective batch size 256 (microbatch 8)
+max_steps: 1778

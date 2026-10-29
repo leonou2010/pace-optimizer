@@ -1,5 +1,5 @@
 id: fig_appendix_wsd_finetune
-paper: "Fig 15"
+paper: "Fig 17"
 desc: "SmolLM2-135M: best val per method across LRs {1,1.5,2,3,5}e-3"
 dataset: smoltalk
 

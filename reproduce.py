@@ -26,10 +26,13 @@ def expand_sweep(sw):
     for combo in itertools.product(*grid.values()) if grid else [()]:
         r = {"model": sw["model"], "method": base.get("method", "PACE"),
              "schedule": base.get("schedule", "const"), "seed": base.get("seed", 42),
-             "optimizer": dict(base.get("optimizer", {}))}
+             "optimizer": dict(base.get("optimizer", {})),
+             "training": dict(base.get("training", {}))}
         for k, v in zip(grid, combo):
             if k.startswith("optimizer."):
                 r["optimizer"][k.split(".", 1)[1]] = v
+            elif k.startswith("training."):
+                r["training"][k.split(".", 1)[1]] = v
             elif k in ("schedule", "seed", "model", "method"):
                 r[k] = v
             else:
@@ -55,6 +58,8 @@ def command(fig, run, extra):
         cmd.append(f"optimizer.ema_kappa={o['ema_kappa']}")
     if o.get("ema_update_freq") is not None:
         cmd.append(f"optimizer.ema_update_freq={o['ema_update_freq']}")
+    training = {**fig.get("training", {}), **run.get("training", {})}
+    cmd += [f"training.{k}={v}" for k, v in training.items()]
     return cmd + extra
 
 
@@ -88,7 +93,7 @@ def main():
         cmd = command(fig, r, extra)
         print(" ".join(cmd[1:]).replace("train.py", "python train.py", 1))
         if a.run and (a.limit is None or i < a.limit):
-            subprocess.run(cmd, check=False)
+            subprocess.run(cmd, check=True)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 id: fig_appendix_fig1_all_schedules
-paper: "Fig 16"
+paper: "Fig 18"
 desc: "3 models x 3 schedules: AdamW/EMA per schedule vs PACE constant-LR"
 dataset: smoltalk
 
@@ -31,7 +31,7 @@ sweeps:
     base: {method: EMA, seed: 42, optimizer: {name: ema, lr: 0.001, lambda_pullback: 0.0, ema_kappa: 0.5}}
     grid: {schedule: [const, cos, wsd]}
 
-# PACE constant-LR reference (one run per model, headline config from Fig 1).
+# PACE constant-LR reference (one run per model, single-seed config from Fig 16).
 curves:
   - {model: smollm2_1.7b, method: PACE, schedule: const, seed: 42, optimizer: {name: pace, lr: 0.001,  lambda_pullback: 0.15, ema_kappa: 0.2}}
   - {model: qwen3_1.7b,   method: PACE, schedule: const, seed: 42, optimizer: {name: pace, lr: 0.0005, lambda_pullback: 0.25, ema_kappa: 0.5}}

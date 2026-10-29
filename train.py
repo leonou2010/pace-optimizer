@@ -65,11 +65,14 @@ def lr_lambda(name, total_steps, warmup_steps=0, decay_frac=0.2):
 def run_name(cfg):
     o = cfg.optimizer
     eff_bs = cfg.training.batch_size * cfg.training.gradient_accumulation_steps
-    parts = [o.name, f"lr{o.lr}", f"bs{eff_bs}"]
+    parts = [cfg.model.name.rsplit("/", 1)[-1], o.name, f"lr{o.lr}", f"bs{eff_bs}"]
     if o.use_ema_eval and o.get("ema_kappa") is not None:
         parts.append(f"k{o.ema_kappa}")
     if o.lambda_pullback > 0:
         parts.append(f"lp{o.lambda_pullback}")
+    if o.use_ema_eval:
+        parts.append(f"uf{o.get('ema_update_freq', 1)}")
+    parts.append(f"steps{cfg.training.max_steps or 'epoch'}")
     parts += [f"sched-{cfg.schedule.name}", f"s{cfg.seed}"]
     return "_".join(parts)
 

@@ -3,7 +3,7 @@
     python prepare_data.py --out data/smoltalk --tokenizer HuggingFaceTB/SmolLM2-1.7B
 
 Conversations are formatted as ChatML; only assistant turns are supervised (everything
-else gets label -100). Sequences are truncated and padded to --max-seq-len. Writes
+else gets label -100). Conversations are packed into --max-seq-len sequences. Writes
 <out>/train and <out>/val as HF datasets.
 """
 
@@ -51,17 +51,16 @@ def tokenize_conversation(messages, tokenizer, max_seq_len):
         input_ids.extend(body_ids)
         labels.extend(body_ids if is_assistant else [-100] * len(body_ids))
 
-    input_ids = input_ids[:max_seq_len]
-    labels = labels[:max_seq_len]
     attention_mask = [1] * len(input_ids)
     return input_ids, attention_mask, labels
 
 
 def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
-    """Tokenize, filter, and pad a list of conversation rows into a Dataset."""
+    """Pack tokenized conversations, padding only the last sequence."""
     from datasets import Dataset
 
     out_ids, out_attn, out_labels, skipped = [], [], [], 0
+    pending_ids, pending_labels = [], []
     for ex in rows:
         messages = ex.get("messages") or ex.get("conversations")
         # Skip rows with no assistant content to supervise
@@ -74,9 +73,22 @@ def _build_split(rows, tokenizer, max_seq_len, pad_id, name):
         if len(ids) < 10 or all(label == -100 for label in labels):
             skipped += 1
             continue
-        out_ids.append(ids)
-        out_attn.append(attn)
-        out_labels.append(labels)
+        pending_ids.extend(ids)
+        pending_labels.extend(labels)
+        while len(pending_ids) >= max_seq_len:
+            chunk_ids = pending_ids[:max_seq_len]
+            chunk_labels = pending_labels[:max_seq_len]
+            del pending_ids[:max_seq_len]
+            del pending_labels[:max_seq_len]
+            if any(label != -100 for label in chunk_labels[1:]):
+                out_ids.append(chunk_ids)
+                out_attn.append([1] * max_seq_len)
+                out_labels.append(chunk_labels)
+
+    if pending_ids and any(label != -100 for label in pending_labels[1:]):
+        out_ids.append(pending_ids)
+        out_attn.append([1] * len(pending_ids))
+        out_labels.append(pending_labels)
 
     # Pad to a fixed length for efficient batching
     for i in range(len(out_ids)):
